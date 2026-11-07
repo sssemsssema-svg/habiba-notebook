@@ -40,8 +40,9 @@ app.add_middleware(
 )
 
 BASE_DIR = Path(__file__).resolve().parent
+load_dotenv(BASE_DIR / ".env", override=True)
 
-# API Keys & Key Rotation
+# API Keys & Key Rotation (Google AI Studio Gemini + Groq)
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
 GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
 GEMINI_API_KEYS_RAW = os.getenv("GEMINI_API_KEYS", "")
@@ -93,14 +94,11 @@ def generate_gemini_tts(text: str, voice_name: str = "Aoede") -> bytes:
         return b""
     cache_key = hashlib.md5(f"{voice_name}_{clean_text}".encode("utf-8")).hexdigest()
     cache_wav = AUDIO_CACHE_DIR / f"{cache_key}.wav"
-    cache_mp3 = AUDIO_CACHE_DIR / f"{cache_key}.mp3"
     if cache_wav.exists():
         return cache_wav.read_bytes()
-    if cache_mp3.exists():
-        return cache_mp3.read_bytes()
 
     payload = {
-        "contents": [{"parts": [{"text": clean_text[:450]}]}],
+        "contents": [{"parts": [{"text": f"Read the following text aloud: {clean_text[:450]}"}]}],
         "generationConfig": {
             "responseModalities": ["AUDIO"],
             "speechConfig": {
@@ -112,20 +110,18 @@ def generate_gemini_tts(text: str, voice_name: str = "Aoede") -> bytes:
     }
 
     now = datetime.datetime.now().timestamp()
-    # Try at most one candidate key if not on cooldown
-    candidate_key = None
+    # Try all non-cooldown keys in GEMINI_API_KEYS_LIST
+    keys_to_try = []
     if _last_working_key and _key_cooldowns.get(_last_working_key, 0) < now:
-        candidate_key = _last_working_key
-    else:
-        for k in GEMINI_API_KEYS_LIST:
-            if _key_cooldowns.get(k, 0) < now:
-                candidate_key = k
-                break
+        keys_to_try.append(_last_working_key)
+    for k in GEMINI_API_KEYS_LIST:
+        if k not in keys_to_try and _key_cooldowns.get(k, 0) < now:
+            keys_to_try.append(k)
 
-    if candidate_key:
+    for candidate_key in keys_to_try:
         url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-tts:generateContent?key={candidate_key}"
         try:
-            resp = requests.post(url, json=payload, timeout=2.0)
+            resp = requests.post(url, json=payload, timeout=10.0)
             if resp.status_code == 200:
                 data = resp.json()
                 candidates = data.get("candidates", [])
@@ -145,27 +141,23 @@ def generate_gemini_tts(text: str, voice_name: str = "Aoede") -> bytes:
                             _last_working_key = candidate_key
                             return wav_bytes
             elif resp.status_code == 429:
-                _key_cooldowns[candidate_key] = now + 1800.0
+                _key_cooldowns[candidate_key] = now + 900.0
                 if _last_working_key == candidate_key:
                     _last_working_key = None
             else:
-                _key_cooldowns[candidate_key] = now + 300.0
+                _key_cooldowns[candidate_key] = now + 120.0
         except Exception:
-            _key_cooldowns[candidate_key] = now + 120.0
+            _key_cooldowns[candidate_key] = now + 60.0
 
-    # Ultra-fast Edge-TTS Egyptian neural voice fallback (<1s latency)
+    # Fallback to gTTS (Google Translate Text-to-Speech) - 100% Google Voice, never Microsoft Salma
     try:
-        import edge_tts, asyncio
-        async def _call_edge():
-            comm = edge_tts.Communicate(clean_text[:350], "ar-EG-SalmaNeural", rate="+18%", pitch="+2Hz")
-            data = bytearray()
-            async for chunk in comm.stream():
-                if chunk["type"] == "audio":
-                    data.extend(chunk["data"])
-            return bytes(data)
-        res = asyncio.run(_call_edge())
+        from gtts import gTTS
+        buf = io.BytesIO()
+        tts = gTTS(clean_text[:350], lang="ar", tld="com.eg")
+        tts.write_to_fp(buf)
+        res = buf.getvalue()
         if res:
-            cache_mp3.write_bytes(res)
+            cache_wav.write_bytes(res)
             return res
     except Exception:
         pass

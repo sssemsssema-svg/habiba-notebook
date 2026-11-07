@@ -1,4 +1,4 @@
-const CACHE_NAME = "habiba-notebook-v3-fresh";
+const CACHE_NAME = "habiba-notebook-v4-aoede-permanent";
 
 self.addEventListener("install", (event) => {
   self.skipWaiting();

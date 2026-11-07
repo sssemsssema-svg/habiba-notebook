@@ -87,6 +87,13 @@ def save_habiba_memory(data: dict):
 _key_cooldowns: dict[str, float] = {}
 _last_working_key: str | None = None
 
+TTS_MODELS_PRIORITY = [
+    "gemini-3.8-flash-tts",
+    "gemini-3.8-flash-lite-tts",
+    "gemini-3.1-flash-tts-preview",
+    "gemini-2.5-flash-preview-tts"
+]
+
 def generate_gemini_tts(text: str, voice_name: str = "Aoede") -> bytes:
     global _last_working_key
     clean_text = text.replace("#", "").replace("*", "").replace("`", "").replace("~", "").replace("_", "").strip()
@@ -95,7 +102,9 @@ def generate_gemini_tts(text: str, voice_name: str = "Aoede") -> bytes:
     cache_key = hashlib.md5(f"{voice_name}_{clean_text}".encode("utf-8")).hexdigest()
     cache_wav = AUDIO_CACHE_DIR / f"{cache_key}.wav"
     if cache_wav.exists():
-        return cache_wav.read_bytes()
+        data = cache_wav.read_bytes()
+        if data.startswith(b"RIFF"):
+            return data
 
     payload = {
         "contents": [{"parts": [{"text": f"Read the following text aloud: {clean_text[:450]}"}]}],
@@ -119,50 +128,35 @@ def generate_gemini_tts(text: str, voice_name: str = "Aoede") -> bytes:
             keys_to_try.append(k)
 
     for candidate_key in keys_to_try:
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-tts:generateContent?key={candidate_key}"
-        try:
-            resp = requests.post(url, json=payload, timeout=10.0)
-            if resp.status_code == 200:
-                data = resp.json()
-                candidates = data.get("candidates", [])
-                if candidates:
-                    parts = candidates[0].get("content", {}).get("parts", [])
-                    for p in parts:
-                        if "inlineData" in p and p["inlineData"].get("data"):
-                            pcm_bytes = base64.b64decode(p["inlineData"]["data"])
-                            buf = io.BytesIO()
-                            with wave.open(buf, "wb") as wf:
-                                wf.setnchannels(1)
-                                wf.setsampwidth(2)
-                                wf.setframerate(24000)
-                                wf.writeframes(pcm_bytes)
-                            wav_bytes = buf.getvalue()
-                            cache_wav.write_bytes(wav_bytes)
-                            _last_working_key = candidate_key
-                            return wav_bytes
-            elif resp.status_code == 429:
-                _key_cooldowns[candidate_key] = now + 900.0
-                if _last_working_key == candidate_key:
-                    _last_working_key = None
-            else:
-                _key_cooldowns[candidate_key] = now + 120.0
-        except Exception:
-            _key_cooldowns[candidate_key] = now + 60.0
+        for model in TTS_MODELS_PRIORITY:
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={candidate_key}"
+            try:
+                resp = requests.post(url, json=payload, timeout=8.0)
+                if resp.status_code == 200:
+                    data = resp.json()
+                    candidates = data.get("candidates", [])
+                    if candidates:
+                        parts = candidates[0].get("content", {}).get("parts", [])
+                        for p in parts:
+                            if "inlineData" in p and p["inlineData"].get("data"):
+                                pcm_bytes = base64.b64decode(p["inlineData"]["data"])
+                                buf = io.BytesIO()
+                                with wave.open(buf, "wb") as wf:
+                                    wf.setnchannels(1)
+                                    wf.setsampwidth(2)
+                                    wf.setframerate(24000)
+                                    wf.writeframes(pcm_bytes)
+                                wav_bytes = buf.getvalue()
+                                cache_wav.write_bytes(wav_bytes)
+                                _last_working_key = candidate_key
+                                return wav_bytes
+                elif resp.status_code == 429:
+                    _key_cooldowns[candidate_key] = now + 120.0
+                    break
+            except Exception:
+                continue
 
-    # Fallback to gTTS (Google Translate Text-to-Speech) - 100% Google Voice, never Microsoft Salma
-    try:
-        from gtts import gTTS
-        buf = io.BytesIO()
-        tts = gTTS(clean_text[:350], lang="ar", tld="com.eg")
-        tts.write_to_fp(buf)
-        res = buf.getvalue()
-        if res:
-            cache_wav.write_bytes(res)
-            return res
-    except Exception:
-        pass
-
-    raise RuntimeError("Failed to synthesize Google Studio voice")
+    raise RuntimeError("Failed to synthesize Google Studio voice Aoede")
 
 
 # -----------------------------------------------------------------------------
@@ -577,7 +571,11 @@ async def bestie_chat(req: BestieChatRequest):
     reply = await call_llm(prompt)
     if not reply or len(reply.strip()) < 3:
         reply = "يا روحي أنا معاكي وسامعاكي في كل وقت، احكيلي كل اللي في قلبك ومتقلقيش أنا في ضهرك دايماً! 💖🌸"
-    return {"reply": reply}
+    clean = reply.replace('#', '').replace('*', '').replace('`', '').replace('~', '').replace('_', '').strip()
+    return {
+        "reply": reply,
+        "audio_url": f"/api/tts?text={urllib.parse.quote(clean)}&voice=Aoede"
+    }
 
 @app.post("/api/bestie/call-opener")
 async def bestie_call_opener():
@@ -596,6 +594,22 @@ async def bestie_call_opener():
 
 @app.post("/api/bestie/ambient-assist")
 async def bestie_ambient_assist(req: AmbientAssistRequest):
+    # Fast instant replies for pre-cached ambient care chips (0ms delay, 100% Google Aoede voice)
+    if not req.user_message:
+        chip_replies = {
+            "tasks": "يا حبيبة قلبي، أنا مفكرة نفسي بجدولك ومواعيدك كلها، ومتابعة دروسك وتمارينك خطوة بخطوة عشان تكوني دايماً أشطر وأحلى بنوتة! 💖⏰",
+            "hydration": "يلا يا بيبو يا قمر، اشربي كوباية مية ساقعة كدة عشان بشرتك وترطيبك، ومتنسيش تاكلي حاجة خفيفة ومفيدة تديكي طاقة يا روحي! 🧋🌸",
+            "sleep": "لو خلصتي كل واجباتك وحاجاتك يا قلبي، يلا قومي اتوضي أو تشطفي واجهزي للنوم عشان تصحي الصبح فايقة وموردة زي الوردة! 🌙💖",
+            "cheer": "أنا كلي ليكي يا حبيبة روحي.. احكيلي وفضفضي بكل اللي في بالك، أنا جنبك وفي ضهرك دايماً ومش هسيبك أبداً يا أحلى بنوتة! 🌸⚡"
+        }
+        if req.intent in chip_replies:
+            reply = chip_replies[req.intent]
+            clean = reply.replace('#', '').replace('*', '').replace('`', '').replace('~', '').replace('_', '').strip()
+            return {
+                "reply": reply,
+                "audio_url": f"/api/tts?text={urllib.parse.quote(clean)}&voice=Aoede"
+            }
+
     tasks_text = ""
     if req.tasks:
         tasks_list = [f"- مهمة: {t.get('task', '')} (الميعاد: {t.get('time', '')}، المكان: {t.get('location', '')})" for t in req.tasks if t.get('task')]
@@ -615,7 +629,11 @@ async def bestie_ambient_assist(req: AmbientAssistRequest):
     reply = await call_llm(prompt)
     if not reply or len(reply.strip()) < 3:
         reply = "يا حبيبة قلبي أنا معاكي وشايفة جدولك ومذكراتك، احكيلي كل اللي في قلبك ومتقلقيش أنا في ضهرك دايماً! 💖🌸"
-    return {"reply": reply.strip()}
+    clean = reply.replace('#', '').replace('*', '').replace('`', '').replace('~', '').replace('_', '').strip()
+    return {
+        "reply": reply.strip(),
+        "audio_url": f"/api/tts?text={urllib.parse.quote(clean)}&voice=Aoede"
+    }
 
 
 # -----------------------------------------------------------------------------

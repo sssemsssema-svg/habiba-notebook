@@ -5,10 +5,10 @@
 
 document.addEventListener("DOMContentLoaded", () => {
   // -------------------------------------------------------------------------
-  // 1. Text-To-Speech (Official Google AI Studio TTS Voice Output - Egyptian)
+  // 1. Text-To-Speech (Official Google AI Studio TTS Voice Output - Egyptian Dialect)
   // -------------------------------------------------------------------------
   let currentGoogleAudio = null;
-  function speakNobara(text, onEnd) {
+  function speakNobara(text, onEnd, audioUrl = null) {
     if (!text || !text.trim()) {
       if (onEnd) onEnd();
       return;
@@ -19,8 +19,10 @@ document.addEventListener("DOMContentLoaded", () => {
         currentGoogleAudio = null;
       }
       const clean = text.replace(/[#*`~_]/g, "").trim();
-      const url = `/api/tts?text=${encodeURIComponent(clean)}&voice=Aoede`;
+      const url = audioUrl || `/api/tts?text=${encodeURIComponent(clean)}&voice=Aoede`;
       currentGoogleAudio = new Audio(url);
+      // Lively, enthusiastic anime bestie speed (+8%)
+      currentGoogleAudio.playbackRate = 1.08;
       if (onEnd) {
         currentGoogleAudio.onended = () => { currentGoogleAudio = null; onEnd(); };
         currentGoogleAudio.onerror = () => { currentGoogleAudio = null; onEnd(); };
@@ -214,14 +216,14 @@ document.addEventListener("DOMContentLoaded", () => {
   const btnHeaderCall = document.getElementById("btn-header-call");
   const btnSlotStartCall = document.getElementById("btn-slot-start-call");
 
-  function showNobaraMessage(msg, speakIt = false) {
+  function showNobaraMessage(msg, speakIt = false, audioUrl = null) {
     if (assistantBubble) {
       assistantBubble.innerText = msg;
       assistantBubble.classList.add("pulse-aura");
       setTimeout(() => assistantBubble.classList.remove("pulse-aura"), 1200);
     }
     if (speakIt) {
-      speakNobara(msg);
+      speakNobara(msg, null, audioUrl);
     }
   }
 
@@ -257,7 +259,7 @@ document.addEventListener("DOMContentLoaded", () => {
         });
         const data = await res.json();
         if (data.reply) {
-          showNobaraMessage(data.reply, true);
+          showNobaraMessage(data.reply, true, data.audio_url);
         }
       } catch (e) {
         showNobaraMessage("معاكي وسامعاكي يا بيبو يا قمر! 🌸", true);
@@ -330,6 +332,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const url = audioUrl || `/api/tts?text=${encodeURIComponent(clean)}&voice=Aoede`;
     try {
       preloadedCallAudio = new Audio(url);
+      preloadedCallAudio.playbackRate = 1.08;
       preloadedCallAudio.preload = "auto";
       preloadedCallAudio.load();
     } catch (e) {
@@ -419,6 +422,7 @@ document.addEventListener("DOMContentLoaded", () => {
         currentGoogleAudio = null;
       }
       currentGoogleAudio = preloadedCallAudio;
+      currentGoogleAudio.playbackRate = 1.08;
       preloadedCallAudio = null;
       currentGoogleAudio.onended = () => {
         currentGoogleAudio = null;
@@ -503,7 +507,7 @@ document.addEventListener("DOMContentLoaded", () => {
       if (nobaraLiveReply) nobaraLiveReply.innerText = d.reply;
       speakNobara(d.reply, () => {
         if (isCallActive) startCallSpeechRecognition();
-      });
+      }, d.audio_url);
     } catch (e) {
       if (nobaraLiveReply) nobaraLiveReply.innerText = "يا روحي معاكي وسامعة كل كلامك العسل ده! 🌸";
       speakNobara("يا روحي معاكي وسامعة كل كلامك العسل ده!", () => {

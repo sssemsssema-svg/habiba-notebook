@@ -151,7 +151,8 @@
               <button class="care-chip" data-intent="sleep_check">🌙 أنام ولا لسة؟</button>
               <button class="care-chip" data-intent="chat">💖 فضفضي معايا</button>
               <button id="btn-ambient-mic" class="care-chip chip-mic" title="تحدثي بالصوت مع نوبارا">🎙️ تحدثي مع نوبارا</button>
-              <button id="btn-card-call" class="care-chip chip-call" title="رنة مكالمة فون">📞 مكالمة فون ورينجتون</button>
+              <button id="btn-test-lesson-call" class="care-chip chip-call" title="تجربة رنة تذكير الدرس">⏰ رنة تذكير الدرس (قبل الميعاد)</button>
+              <button id="btn-test-sleep-call" class="care-chip chip-call" title="تجربة رنة تذكير النوم">🌙 رنة ميعاد النوم</button>
             </div>
           </div>
 
@@ -235,26 +236,43 @@
                ============================================================= -->
           <section id="table-tab" class="tab-content">
             
-            <!-- Table Hero & Master Voice Controller -->
-            <div class="table-voice-box">
-              <div class="box-text">
-                <h3>⚡ المايكروفون الذكي لجدول المهمات</h3>
-                <p>قولي جملة عادية زي: <em>«عايزة أروح النادي الجمعة الساعة 5 تمرين جمباز وشنطة التمرين في الملاحظات»</em>.. والذكاء الاصطناعي هيفرّغها في الأعمدة الـ 7 فوراً!</p>
+            <!-- Dual Voice Controller: Mic 1 Setup Columns + Mic 2 Continuous Live Dictation -->
+            <div class="table-voice-grid">
+              <!-- Mic 1: Setup Headers / Columns -->
+              <div class="voice-card-box setup-box">
+                <div class="card-text">
+                  <h4>🎙️ ١. تحديد خانات الجدول</h4>
+                  <p>اضغطي وقولي: <em>«الجدول هيتكون من 1 اليوم، 2 المادة، 3 ميعاد الدرس، 4 المكان، 5 الواجب»</em></p>
+                </div>
+                <div class="card-action">
+                  <button id="btn-table-setup-mic" class="mic-master-btn pulse-glow" title="تحديد خانات الجدول">
+                    <span class="mic-icon">🎙️</span>
+                    <span class="sound-wave"></span>
+                  </button>
+                  <span id="table-setup-status" class="table-status-label">اضغطي لتحديد الخانات</span>
+                </div>
               </div>
 
-              <div class="table-mic-action">
-                <button id="btn-table-master-mic" class="mic-master-btn pulse-glow" title="تحدثي بمهمة جديدة">
-                  <span class="mic-icon">🎙️</span>
-                  <span class="sound-wave"></span>
-                </button>
-                <span id="table-voice-status" class="table-status-label">جاهز للاستماع لمهمتك..</span>
+              <!-- Mic 2: Continuous Open Live Dictation -->
+              <div class="voice-card-box stream-box">
+                <div class="card-text">
+                  <h4>🔴 ٢. التفريغ المفتوح للجدول (مستمر حتى الإيقاف)</h4>
+                  <p>اضغطي هيفضل مفتوح وسامعك علطول وتكلمي براحتك.. هيفرغ في الخانات كلمة بكلمة لغاية ما تضغطي إيقاف!</p>
+                </div>
+                <div class="card-action">
+                  <button id="btn-table-continuous-mic" class="mic-master-btn pulse-glow" title="التفريغ المفتوح للجدول">
+                    <span class="mic-icon">🔴</span>
+                    <span class="sound-wave"></span>
+                  </button>
+                  <span id="table-continuous-status" class="table-status-label">جاهز للتفريغ المستمر..</span>
+                </div>
               </div>
             </div>
 
-            <!-- Table Live Streaming Pill -->
+            <!-- Big Live Teleprompter Display Bar -->
             <div id="table-live-stream-bar" class="live-stream-bar hidden">
-              <span class="live-indicator-dot"></span>
-              <span class="live-label">سامع مهمتك:</span>
+              <span class="live-indicator-dot pulse-red"></span>
+              <span class="live-label">🔴 نوبارا سامعاكي وبتكتب لايف:</span>
               <span id="table-live-words" class="live-words">...</span>
             </div>
 

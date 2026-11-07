@@ -756,6 +756,56 @@ body {
 /* ==========================================================================
    FEATURE 2: SMART VOICE TABLE (TAB 2)
    ========================================================================== */
+.table-voice-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 12px;
+  margin-bottom: 14px;
+}
+.voice-card-box {
+  background: linear-gradient(135deg, #27143e 0%, #150926 100%);
+  border: 1.5px solid rgba(123, 44, 191, 0.6);
+  border-radius: 16px;
+  padding: 14px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.2);
+}
+.voice-card-box.stream-box {
+  border-color: #ff007f;
+  background: linear-gradient(135deg, #32102e 0%, #17071e 100%);
+}
+.voice-card-box .card-text h4 {
+  margin: 0 0 4px 0;
+  font-size: 0.95rem;
+  color: #00f0ff;
+}
+.voice-card-box.stream-box .card-text h4 {
+  color: #ff70a6;
+}
+.voice-card-box .card-text p {
+  margin: 0;
+  font-size: 0.8rem;
+  color: #d1c4e9;
+  line-height: 1.35;
+}
+.voice-card-box .card-action {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+.pulse-red {
+  animation: pulseRedAnimation 1.5s infinite;
+}
+@keyframes pulseRedAnimation {
+  0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(255, 0, 127, 0.7); }
+  70% { transform: scale(1.05); box-shadow: 0 0 0 12px rgba(255, 0, 127, 0); }
+  100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(255, 0, 127, 0); }
+}
+
 .table-voice-box {
   background: linear-gradient(135deg, #27143e 0%, #150926 100%);
   border: 1.5px solid rgba(123, 44, 191, 0.6);

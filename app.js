@@ -1,11 +1,11 @@
 /**
  * Smart Voice-Enabled Anime Notebook (Habiba's Secret Diary & Nobara Bestie Edition)
- * Real-Time Streaming Dictation + Simulated Phone Call + Ambient Background Bestie Companion
+ * Real-Time Continuous Dictation + Google AI Studio TTS (Egyptian Dialect) + Proactive Calls + Dynamic Smart Table
  */
 
 document.addEventListener("DOMContentLoaded", () => {
   // -------------------------------------------------------------------------
-  // 1. Text-To-Speech (Official Google TTS Voice Output)
+  // 1. Text-To-Speech (Official Google AI Studio TTS Voice Output - Egyptian)
   // -------------------------------------------------------------------------
   let currentGoogleAudio = null;
   function speakNobara(text, onEnd) {
@@ -19,20 +19,17 @@ document.addEventListener("DOMContentLoaded", () => {
         currentGoogleAudio = null;
       }
       const clean = text.replace(/[#*`~_]/g, "").trim();
-      const url = `/api/tts?text=${encodeURIComponent(clean)}`;
+      const url = `/api/tts?text=${encodeURIComponent(clean)}&voice=Aoede`;
       currentGoogleAudio = new Audio(url);
       if (onEnd) {
         currentGoogleAudio.onended = () => { currentGoogleAudio = null; onEnd(); };
         currentGoogleAudio.onerror = () => { currentGoogleAudio = null; onEnd(); };
       }
       currentGoogleAudio.play().catch(e => {
-        console.warn("Google TTS audio play catch:", e);
+        console.warn("Audio autoplay catch, falling back to speech synthesis if needed:", e);
         if ('speechSynthesis' in window) {
           const u = new SpeechSynthesisUtterance(clean);
           u.lang = 'ar-EG';
-          const voices = window.speechSynthesis.getVoices();
-          const googleVoice = voices.find(v => (v.name.includes("Google") || v.name.includes("عربية")) && v.lang.startsWith("ar"));
-          if (googleVoice) u.voice = googleVoice;
           if (onEnd) u.onend = onEnd;
           window.speechSynthesis.speak(u);
         } else if (onEnd) {
@@ -48,35 +45,53 @@ document.addEventListener("DOMContentLoaded", () => {
   // -------------------------------------------------------------------------
   // 2. Synthesized Telephone Ringtone (Web Audio API - 100% Reliable & Mobile-Safe)
   // -------------------------------------------------------------------------
-  let ringtoneAudioCtx = null;
+  let ringtoneCtx = null;
   let ringtoneInterval = null;
 
-  function startRingtone() {
+  function playRingtone() {
     stopRingtone();
     try {
-      ringtoneAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
-      const playMelody = () => {
-        if (!ringtoneAudioCtx || ringtoneAudioCtx.state === "closed") return;
-        const notes = [659.25, 830.61, 987.77, 1318.51, 987.77, 1318.51];
-        notes.forEach((freq, idx) => {
-          const osc = ringtoneAudioCtx.createOscillator();
-          const gain = ringtoneAudioCtx.createGain();
-          osc.type = "sine";
-          const startTime = ringtoneAudioCtx.currentTime + idx * 0.12;
-          osc.frequency.setValueAtTime(freq, startTime);
-          gain.gain.setValueAtTime(0.25, startTime);
-          gain.gain.exponentialRampToValueAtTime(0.001, startTime + 0.32);
-          osc.connect(gain);
-          gain.connect(ringtoneAudioCtx.destination);
-          osc.start(startTime);
-          osc.stop(startTime + 0.35);
-        });
-      };
-      playMelody();
-      ringtoneInterval = setInterval(playMelody, 1600);
+      const AudioContext = window.AudioContext || window.webkitAudioContext;
+      ringtoneCtx = new AudioContext();
     } catch (e) {
-      console.warn("Ringtone error:", e);
+      return;
     }
+
+    function ringCycle() {
+      if (!ringtoneCtx || ringtoneCtx.state === "closed") return;
+      const now = ringtoneCtx.currentTime;
+
+      const osc1 = ringtoneCtx.createOscillator();
+      const osc2 = ringtoneCtx.createOscillator();
+      const gain = ringtoneCtx.createGain();
+
+      osc1.type = "sine";
+      osc2.type = "sine";
+      osc1.frequency.setValueAtTime(440, now);
+      osc2.frequency.setValueAtTime(480, now);
+
+      gain.gain.setValueAtTime(0, now);
+      gain.gain.linearRampToValueAtTime(0.2, now + 0.05);
+      gain.gain.setValueAtTime(0.2, now + 0.8);
+      gain.gain.linearRampToValueAtTime(0, now + 0.85);
+
+      gain.gain.setValueAtTime(0, now + 1.0);
+      gain.gain.linearRampToValueAtTime(0.2, now + 1.05);
+      gain.gain.setValueAtTime(0.2, now + 1.8);
+      gain.gain.linearRampToValueAtTime(0, now + 1.85);
+
+      osc1.connect(gain);
+      osc2.connect(gain);
+      gain.connect(ringtoneCtx.destination);
+
+      osc1.start(now);
+      osc2.start(now);
+      osc1.stop(now + 2.0);
+      osc2.stop(now + 2.0);
+    }
+
+    ringCycle();
+    ringtoneInterval = setInterval(ringCycle, 3500);
   }
 
   function stopRingtone() {
@@ -84,836 +99,768 @@ document.addEventListener("DOMContentLoaded", () => {
       clearInterval(ringtoneInterval);
       ringtoneInterval = null;
     }
-    if (ringtoneAudioCtx) {
-      try { ringtoneAudioCtx.close(); } catch (e) {}
-      ringtoneAudioCtx = null;
+    if (ringtoneCtx) {
+      try { ringtoneCtx.close(); } catch (e) {}
+      ringtoneCtx = null;
     }
   }
 
   // -------------------------------------------------------------------------
-  // 3. Tab Switching System (Bookmark Ribbons)
+  // 3. Multi-Slot Page Navigation (Mobile Bottom Bar + Ribbon Tabs)
   // -------------------------------------------------------------------------
-  const allTabs = document.querySelectorAll(".tab-ribbon, .nav-tab");
+  const ribbonTabs = document.querySelectorAll(".tab-ribbon");
+  const bottomNavTabs = document.querySelectorAll(".mobile-bottom-nav .nav-tab");
   const tabContents = document.querySelectorAll(".tab-content");
 
-  allTabs.forEach((tab) => {
-    tab.addEventListener("click", () => {
-      const targetId = tab.getAttribute("data-tab");
-      if (!targetId) return;
-
-      allTabs.forEach((t) => {
-        t.classList.toggle("active", t.getAttribute("data-tab") === targetId);
-      });
-      tabContents.forEach((c) => {
-        c.classList.toggle("active", c.id === targetId);
-      });
-      window.scrollTo({ top: 0, behavior: "smooth" });
+  function switchTab(targetId) {
+    ribbonTabs.forEach((r) => {
+      r.classList.toggle("active", r.dataset.tab === targetId);
     });
-  });
-
-  document.getElementById("btn-slot-start-call")?.addEventListener("click", () => {
-    startRingtone();
-    showIncomingCallModal();
-  });
-
-  // Mood selector
-  const moodChips = document.querySelectorAll(".mood-chip");
-  moodChips.forEach((btn) => {
-    btn.addEventListener("click", () => {
-      moodChips.forEach((b) => b.classList.remove("active"));
-      btn.classList.add("active");
-      const mood = btn.getAttribute("data-mood");
-      let reply = "مود رايق وجميل 🌸 دفترك جاهز لكل أفكارك يا حبيبة قلبي!";
-      if (mood === "super") reply = "طاقتك خارقة النهاردة وقمر! ⚡ أنا فخورة بيكي يا أحلى بيبو!";
-      else if (mood === "gaming") reply = "مود الجيمينج شغال! 🎮 قوليلي بتلعبي إيه وأنا أشجعك يا حبيبة؟";
-      else if (mood === "chill") reply = "وقت البوبا والروقان 🧋 احكيلي براحتك يا بيبو أنا سامعاكي ديماً.";
-      showNobaraMessage(reply);
-      speakNobara(reply);
+    bottomNavTabs.forEach((n) => {
+      n.classList.toggle("active", n.dataset.tab === targetId);
     });
-  });
-
-  // Date display in Arabic
-  const dateEl = document.getElementById("current-date");
-  if (dateEl) {
-    const today = new Date();
-    const options = { weekday: "long", day: "numeric", month: "long" };
-    dateEl.innerText = today.toLocaleDateString("ar-EG", options);
+    tabContents.forEach((sec) => {
+      sec.classList.toggle("active", sec.id === targetId);
+    });
+    window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
-  // Web Speech Recognition API Setup
+  ribbonTabs.forEach((btn) => {
+    btn.addEventListener("click", () => switchTab(btn.dataset.tab));
+  });
+
+  bottomNavTabs.forEach((btn) => {
+    btn.addEventListener("click", () => switchTab(btn.dataset.tab));
+  });
+
+  // -------------------------------------------------------------------------
+  // 4. Universal Persistent Voice Recognizer (Continuous Open Mic with Auto-Restart)
+  // -------------------------------------------------------------------------
   const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 
-  // -------------------------------------------------------------------------
-  // 4. AMBIENT BACKGROUND BESTIE COMPANION (نوبارا شغالة مع حبيبة في الخلفية)
-  // -------------------------------------------------------------------------
-  const ambientToggleBtn = document.getElementById("btn-toggle-ambient");
-  const ambientToggleLabel = document.getElementById("ambient-toggle-label");
-  const ambientStatusText = document.getElementById("ambient-status-text");
-  const assistantBubble = document.getElementById("assistant-bubble");
-  const btnAmbientMic = document.getElementById("btn-ambient-mic");
-  let isAmbientActive = true;
+  function createPersistentRecognizer({
+    btn,
+    onStart,
+    onInterim,
+    onFinal,
+    onStop
+  }) {
+    if (!SpeechRecognition) return null;
+    const rec = new SpeechRecognition();
+    rec.lang = "ar-EG";
+    rec.continuous = true;
+    rec.interimResults = true;
 
-  function showNobaraMessage(msg) {
-    if (assistantBubble) {
-      assistantBubble.style.opacity = 0;
-      setTimeout(() => {
-        assistantBubble.innerText = msg;
-        assistantBubble.style.opacity = 1;
-      }, 150);
-    }
-  }
+    let isRecording = false;
+    let finalTranscript = "";
 
-  // Extract tasks from Habiba's 7-column table
-  function getNotebookTasks() {
-    const tasks = [];
-    document.querySelectorAll("#missions-table tbody tr").forEach((tr) => {
-      const cells = tr.querySelectorAll("td");
-      if (cells.length >= 6) {
-        tasks.push({
-          task: cells[0].innerText.trim(),
-          time: cells[1].innerText.trim(),
-          date: cells[2].innerText.trim(),
-          location: cells[3].innerText.trim(),
-          tools: cells[4].innerText.trim(),
-          notes: cells[5].innerText.trim()
-        });
+    rec.onstart = () => {
+      btn?.classList.add("listening", "pulse-red");
+      if (onStart) onStart();
+    };
+
+    rec.onresult = (e) => {
+      let interim = "";
+      for (let i = e.resultIndex; i < e.results.length; ++i) {
+        const text = e.results[i][0].transcript;
+        if (e.results[i].isFinal) {
+          finalTranscript += text + " ";
+        } else {
+          interim += text;
+        }
+      }
+      const full = (finalTranscript + " " + interim).trim();
+      if (onInterim) onInterim(full, interim, finalTranscript);
+    };
+
+    rec.onend = () => {
+      // THE AUTO-RESTART LOOP: Never stop on silence or pause until user clicks stop
+      if (isRecording) {
+        try { rec.start(); } catch (err) {}
+      } else {
+        btn?.classList.remove("listening", "pulse-red");
+        const full = finalTranscript.trim();
+        if (onFinal) onFinal(full);
+      }
+    };
+
+    rec.onerror = (e) => {
+      console.warn("Recognizer event:", e.error);
+      if (isRecording && (e.error === "no-speech" || e.error === "network")) {
+        try { rec.start(); } catch (err) {}
+      }
+    };
+
+    btn?.addEventListener("click", () => {
+      if (!isRecording) {
+        isRecording = true;
+        finalTranscript = "";
+        try { rec.start(); } catch (err) {}
+      } else {
+        isRecording = false;
+        try { rec.stop(); } catch (err) {}
+        if (onStop) onStop();
       }
     });
-    return tasks;
-  }
 
-  // Ambient Assist API Call
-  async function triggerAmbientAssist(intent = "chat", userMessage = "") {
-    const tasks = getNotebookTasks();
-    const diaryText = document.getElementById("diary-textarea")?.value || "";
-    const now = new Date();
-    const currentHour = now.getHours();
-    const currentTime = now.toLocaleTimeString("ar-EG", { hour: "numeric", minute: "numeric" });
-
-    if (ambientStatusText) ambientStatusText.innerText = "نوبارا بتفكر وبترد على حبيبة... 🌸";
-
-    try {
-      const res = await fetch("/api/bestie/ambient-assist", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          user_message: userMessage,
-          intent: intent,
-          tasks: tasks,
-          diary_snippet: diaryText,
-          current_time: currentTime,
-          current_hour: currentHour
-        })
-      });
-      const data = await res.json();
-      const reply = data.reply || "يا حبيبة قلبي أنا جنبك وشايفة كل حاجة في دفترك 💖🌸";
-
-      showNobaraMessage(reply);
-      speakNobara(reply);
-      if (ambientStatusText) ambientStatusText.innerText = "نوبارا جنبك وسامعاكي وشايفة جدولك ومذكراتك يا حبيبة ✨";
-    } catch (e) {
-      console.error(e);
-      if (ambientStatusText) ambientStatusText.innerText = "نوبارا جنبك وسامعاكي دايماً 💖";
-    }
-  }
-
-  // Care Chips Clicking
-  document.querySelectorAll(".care-chip[data-intent]").forEach((chip) => {
-    chip.addEventListener("click", () => {
-      const intent = chip.getAttribute("data-intent");
-      triggerAmbientAssist(intent, "");
-    });
-  });
-
-  // Ambient Mic (Talk to Nobara anytime without leaving notebook)
-  if (SpeechRecognition) {
-    const ambientRec = new SpeechRecognition();
-    ambientRec.lang = "ar-EG";
-    ambientRec.onresult = (e) => {
-      const spoken = e.results[0][0].transcript;
-      triggerAmbientAssist("chat", spoken);
+    return {
+      start: () => { isRecording = true; finalTranscript = ""; try { rec.start(); } catch (e) {} },
+      stop: () => { isRecording = false; try { rec.stop(); } catch (e) {} },
+      isRecording: () => isRecording
     };
-    ambientRec.onstart = () => {
-      btnAmbientMic?.classList.add("speaking");
-      if (ambientStatusText) ambientStatusText.innerText = "سامعاكي يا حبيبة.. احكيلي! 🎙️";
-    };
-    ambientRec.onend = () => {
-      btnAmbientMic?.classList.remove("speaking");
-    };
-
-    btnAmbientMic?.addEventListener("click", () => {
-      try { ambientRec.start(); } catch (e) { ambientRec.stop(); }
-    });
   }
-
-  // Toggle Ambient On/Off
-  ambientToggleBtn?.addEventListener("click", () => {
-    isAmbientActive = !isAmbientActive;
-    if (isAmbientActive) {
-      ambientToggleBtn.classList.add("active");
-      if (ambientToggleLabel) ambientToggleLabel.innerText = "نوبارا شغالة 🟢";
-      if (ambientStatusText) ambientStatusText.innerText = "نوبارا شايفة جدولك ومذكراتك وسامعاكي يا حبيبة ✨";
-      const startMsg = "أنا شغالة في الخلفية معاكي يا حبيبة قلبي! اتصفحي براحتك وأنا في ضهرك دايماً 🌸";
-      showNobaraMessage(startMsg);
-      speakNobara(startMsg);
-    } else {
-      ambientToggleBtn.classList.remove("active");
-      if (ambientToggleLabel) ambientToggleLabel.innerText = "نوبارا متوقفة ⚪";
-      if (ambientStatusText) ambientStatusText.innerText = "تم إيقاف الرفيقة في الخلفية مؤقتاً";
-    }
-  });
-
-  // Automated Care Reminders (Every 3.5 minutes while ambient mode is active)
-  setInterval(() => {
-    if (isAmbientActive) {
-      const now = new Date();
-      const hr = now.getHours();
-      const randomIntents = hr >= 20 ? ["sleep_check", "health_check"] : ["health_check", "remind_tasks"];
-      const chosenIntent = randomIntents[Math.floor(Math.random() * randomIntents.length)];
-      triggerAmbientAssist(chosenIntent, "");
-    }
-  }, 210000);
 
   // -------------------------------------------------------------------------
-  // 5. SIMULATED PHONE CALL SYSTEM (مكالمة هاتفية مع نوبارا)
+  // 5. Nobara Companion Bubble & Header Call Triggers
+  // -------------------------------------------------------------------------
+  const assistantBubble = document.getElementById("assistant-bubble");
+  const ambientStatusText = document.getElementById("ambient-status-text");
+  const btnToggleAmbient = document.getElementById("btn-toggle-ambient");
+  const ambientToggleLabel = document.getElementById("ambient-toggle-label");
+  const btnHeaderCall = document.getElementById("btn-header-call");
+  const btnSlotStartCall = document.getElementById("btn-slot-start-call");
+
+  function showNobaraMessage(msg, speakIt = false) {
+    if (assistantBubble) {
+      assistantBubble.innerText = msg;
+      assistantBubble.classList.add("pulse-aura");
+      setTimeout(() => assistantBubble.classList.remove("pulse-aura"), 1200);
+    }
+    if (speakIt) {
+      speakNobara(msg);
+    }
+  }
+
+  let isAmbientActive = true;
+  btnToggleAmbient?.addEventListener("click", () => {
+    isAmbientActive = !isAmbientActive;
+    if (isAmbientActive) {
+      btnToggleAmbient.classList.add("active");
+      if (ambientToggleLabel) ambientToggleLabel.innerText = "نوبارا شغالة 🟢";
+      showNobaraMessage("أنا رجعت معاكي يا حبيبة قلبي وسامعاكي في أي وقت! 🌸💖", true);
+    } else {
+      btnToggleAmbient.classList.remove("active");
+      if (ambientToggleLabel) ambientToggleLabel.innerText = "نوبارا نايمة ⚪";
+      showNobaraMessage("ارتاحي شوية يا قمر وأنا هفضل في انتظارك لما تناديني.. 💤", false);
+    }
+  });
+
+  // -------------------------------------------------------------------------
+  // 6. Ambient Care Chips & Test Proactive Calling
+  // -------------------------------------------------------------------------
+  const careChips = document.querySelectorAll(".ambient-care-chips .care-chip[data-intent]");
+  const btnTestLessonCall = document.getElementById("btn-test-lesson-call");
+  const btnTestSleepCall = document.getElementById("btn-test-sleep-call");
+
+  careChips.forEach(chip => {
+    chip.addEventListener("click", async () => {
+      const intent = chip.dataset.intent;
+      try {
+        const res = await fetch("/api/bestie/ambient-assist", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ intent: intent })
+        });
+        const data = await res.json();
+        if (data.reply) {
+          showNobaraMessage(data.reply, true);
+        }
+      } catch (e) {
+        showNobaraMessage("معاكي وسامعاكي يا بيبو يا قمر! 🌸", true);
+      }
+    });
+  });
+
+  btnTestLessonCall?.addEventListener("click", async () => {
+    triggerProactiveIncomingCall("lesson");
+  });
+
+  btnTestSleepCall?.addEventListener("click", async () => {
+    triggerProactiveIncomingCall("sleep");
+  });
+
+  // Ambient Mic with Persistent Continuous Recognizer
+  const btnAmbientMic = document.getElementById("btn-ambient-mic");
+  createPersistentRecognizer({
+    btn: btnAmbientMic,
+    onStart: () => {
+      btnAmbientMic?.classList.add("speaking");
+      if (ambientStatusText) ambientStatusText.innerText = "🔴 نوبارا سامعاكي يا روحي.. اتكلمي براحتك واضغطي إيقاف لما تخلصي ⏹️";
+    },
+    onInterim: (full) => {
+      if (assistantBubble) assistantBubble.innerText = "سامعاكي: " + full;
+    },
+    onFinal: async (full) => {
+      btnAmbientMic?.classList.remove("speaking");
+      if (!full) return;
+      if (ambientStatusText) ambientStatusText.innerText = "نوبارا بتفكر وبترد عليكي... 💖";
+      try {
+        const res = await fetch("/api/bestie/ambient-assist", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ intent: "chat", user_message: full })
+        });
+        const data = await res.json();
+        showNobaraMessage(data.reply, true);
+      } catch (err) {
+        showNobaraMessage("يا روحي أنا معاكي وسامعة كل كلامك الحلو ده! 🌸", true);
+      }
+    }
+  });
+
+  // -------------------------------------------------------------------------
+  // 7. Simulated Phone Call System (Incoming + Active Voice Call)
   // -------------------------------------------------------------------------
   const incomingCallModal = document.getElementById("incoming-call-modal");
   const activeCallModal = document.getElementById("active-call-modal");
-  const btnHeaderCall = document.getElementById("btn-header-call");
-  const btnCardCall = document.getElementById("btn-card-call");
   const btnAcceptCall = document.getElementById("btn-accept-call");
   const btnDeclineCall = document.getElementById("btn-decline-call");
   const btnEndCall = document.getElementById("btn-end-call");
   const btnCallMicToggle = document.getElementById("btn-call-mic-toggle");
-  const callTimerEl = document.getElementById("call-timer");
-  const nobaraLiveReplyEl = document.getElementById("nobara-live-reply");
-  const userCallLiveTextEl = document.getElementById("user-call-live-text");
-  const nobaraCallStatusEl = document.getElementById("nobara-call-status");
+  const nobaraLiveReply = document.getElementById("nobara-live-reply");
+  const userCallLiveText = document.getElementById("user-call-live-text");
+  const callTimer = document.getElementById("call-timer");
+  const callerSubtitle = document.querySelector(".caller-subtitle");
 
-  let callSeconds = 0;
-  let callTimerInterval = null;
-  let callRecognizer = null;
   let isCallActive = false;
+  let callStartTime = 0;
+  let callTimerInterval = null;
+  let activeCallProactiveMessage = "";
 
-  function triggerIncomingCall() {
-    if (isCallActive) return;
-    startRingtone();
-    incomingCallModal?.classList.remove("hidden");
+  async function triggerProactiveIncomingCall(forceType = null) {
+    try {
+      const res = await fetch("/api/proactive/check", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ force_type: forceType })
+      });
+      const data = await res.json();
+      if (data.should_call) {
+        activeCallProactiveMessage = data.message;
+        if (callerSubtitle) callerSubtitle.innerText = data.message.slice(0, 40) + "... 💖";
+        incomingCallModal?.classList.remove("hidden");
+        playRingtone();
+      }
+    } catch (e) {
+      console.warn("Proactive check error:", e);
+    }
   }
 
-  btnHeaderCall?.addEventListener("click", triggerIncomingCall);
-  btnCardCall?.addEventListener("click", triggerIncomingCall);
+  // Periodic Heartbeat check every 25 seconds for autonomous call reminders
+  setInterval(() => {
+    if (!isCallActive && incomingCallModal?.classList.contains("hidden")) {
+      triggerProactiveIncomingCall();
+    }
+  }, 25000);
+
+  function startIncomingCallRing() {
+    activeCallProactiveMessage = "";
+    incomingCallModal?.classList.remove("hidden");
+    playRingtone();
+  }
+
+  btnHeaderCall?.addEventListener("click", startIncomingCallRing);
+  btnSlotStartCall?.addEventListener("click", startIncomingCallRing);
 
   btnDeclineCall?.addEventListener("click", () => {
     stopRingtone();
     incomingCallModal?.classList.add("hidden");
   });
 
-  btnAcceptCall?.addEventListener("click", async () => {
+  btnAcceptCall?.addEventListener("click", () => {
     stopRingtone();
     incomingCallModal?.classList.add("hidden");
-    activeCallModal?.classList.remove("hidden");
-    startActiveCallSession();
+    openActiveCall();
   });
 
-  async function startActiveCallSession() {
+  btnEndCall?.addEventListener("click", () => {
+    endActiveCall();
+  });
+
+  function openActiveCall() {
     isCallActive = true;
-    callSeconds = 0;
-    if (callTimerEl) callTimerEl.innerText = "00:00";
-    if (nobaraCallStatusEl) nobaraCallStatusEl.innerText = "نوبارا بترد على حبيبة لايف...";
-    if (userCallLiveTextEl) userCallLiveTextEl.innerText = "تحدثي، كلامك بيظهر هنا لايف...";
+    activeCallModal?.classList.remove("hidden");
+    callStartTime = Date.now();
+    callTimerInterval = setInterval(updateCallTimer, 1000);
 
-    callTimerInterval = setInterval(() => {
-      callSeconds++;
-      const mins = String(Math.floor(callSeconds / 60)).padStart(2, "0");
-      const secs = String(callSeconds % 60).padStart(2, "0");
-      if (callTimerEl) callTimerEl.innerText = `${mins}:${secs}`;
-    }, 1000);
+    if (activeCallProactiveMessage) {
+      if (nobaraLiveReply) nobaraLiveReply.innerText = activeCallProactiveMessage;
+      speakNobara(activeCallProactiveMessage, () => {
+        if (isCallActive) startCallSpeechRecognition();
+      });
+    } else {
+      fetch("/api/bestie/call-opener", { method: "POST" })
+        .then(r => r.json())
+        .then(d => {
+          const op = d.opener || "ألوو يا بيبو يا قمر! وحشتيني أوي.. سامعاكي ومستنياكي تحكيلي كل حاجة! 💖";
+          if (nobaraLiveReply) nobaraLiveReply.innerText = op;
+          speakNobara(op, () => {
+            if (isCallActive) startCallSpeechRecognition();
+          });
+        })
+        .catch(() => {
+          if (nobaraLiveReply) nobaraLiveReply.innerText = "ألوو يا حبيبة يا قلبي! سامعاكي يا روحي احكيلي كل حاجة 💖";
+          speakNobara("ألوو يا حبيبة يا قلبي! سامعاكي يا روحي احكيلي كل حاجة", () => {
+            if (isCallActive) startCallSpeechRecognition();
+          });
+        });
+    }
+  }
 
-    const opener = "ألوو يا حبيبة يا قلبي! وحشتيني أوي.. عاملة إيه يا بيبو؟ أنا معاكي وسامعاكي قوليلي كل اللي في قلبك! 💖🌸";
-    if (nobaraLiveReplyEl) nobaraLiveReplyEl.innerText = opener;
-    speakNobara(opener, () => {
-      if (isCallActive) startCallSpeechRecognition();
-    });
+  function endActiveCall() {
+    isCallActive = false;
+    clearInterval(callTimerInterval);
+    callTimerInterval = null;
+    activeCallModal?.classList.add("hidden");
+    if (currentGoogleAudio) {
+      currentGoogleAudio.pause();
+      currentGoogleAudio = null;
+    }
+  }
+
+  function updateCallTimer() {
+    const elapsed = Math.floor((Date.now() - callStartTime) / 1000);
+    const m = String(Math.floor(elapsed / 60)).padStart(2, "0");
+    const s = String(elapsed % 60).padStart(2, "0");
+    if (callTimer) callTimer.innerText = `${m}:${s}`;
   }
 
   function startCallSpeechRecognition() {
     if (!SpeechRecognition || !isCallActive) return;
-    try { if (callRecognizer) callRecognizer.stop(); } catch(e) {}
+    const callRec = new SpeechRecognition();
+    callRec.lang = "ar-EG";
+    callRec.continuous = true;
+    callRec.interimResults = true;
 
-    callRecognizer = new SpeechRecognition();
-    callRecognizer.lang = "ar-EG";
-    callRecognizer.continuous = true;
-    callRecognizer.interimResults = true;
+    btnCallMicToggle?.classList.add("speaking");
 
-    let callFinalText = "";
-    let pauseTimer = null;
-
-    callRecognizer.onstart = () => {
-      btnCallMicToggle?.classList.add("speaking");
-      if (nobaraCallStatusEl) nobaraCallStatusEl.innerText = "نوبارا بتسمعك يا حبيبة.. اتكلمي براحتك 🎙️";
-    };
-
-    callRecognizer.onresult = (event) => {
+    callRec.onresult = (e) => {
       let interim = "";
-      for (let i = event.resultIndex; i < event.results.length; ++i) {
-        const text = event.results[i][0].transcript;
-        if (event.results[i].isFinal) {
-          callFinalText += text + " ";
-        } else {
-          interim += text;
-        }
+      let finalTxt = "";
+      for (let i = e.resultIndex; i < e.results.length; ++i) {
+        if (e.results[i].isFinal) finalTxt += e.results[i][0].transcript + " ";
+        else interim += e.results[i][0].transcript;
       }
+      const full = (finalTxt + " " + interim).trim();
+      if (userCallLiveText) userCallLiveText.innerText = full;
 
-      const stream = (callFinalText + " " + interim).trim();
-      if (userCallLiveTextEl) userCallLiveTextEl.innerText = stream;
-
-      clearTimeout(pauseTimer);
-      pauseTimer = setTimeout(() => {
-        if (stream && isCallActive) {
-          sendCallMessageToNobara(stream);
-          callFinalText = "";
-        }
-      }, 2200);
-    };
-
-    callRecognizer.onend = () => {
-      btnCallMicToggle?.classList.remove("speaking");
-      if (isCallActive) {
-        try { callRecognizer.start(); } catch(e) {}
+      if (finalTxt.trim().length > 3) {
+        callRec.stop();
+        sendUserCallMessage(finalTxt.trim());
       }
     };
 
-    try {
-      callRecognizer.start();
-    } catch(e) {
-      console.warn("Call mic error:", e);
-    }
+    callRec.onend = () => {
+      if (isCallActive && !currentGoogleAudio) {
+        try { callRec.start(); } catch (err) {}
+      }
+    };
+
+    try { callRec.start(); } catch (e) {}
   }
 
-  async function sendCallMessageToNobara(message) {
-    if (!message || !isCallActive) return;
-    if (nobaraCallStatusEl) nobaraCallStatusEl.innerText = "نوبارا بتفكر وبترد على حبيبة... 💖";
-
+  async function sendUserCallMessage(msg) {
+    if (!isCallActive) return;
     try {
-      try { callRecognizer?.stop(); } catch(e) {}
-
       const res = await fetch("/api/bestie/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ user_message: `حبيبة بتقولك: ${message}` }),
+        body: JSON.stringify({ user_message: msg })
       });
-      const data = await res.json();
-      const reply = data.reply || "يا حبيبة قلبي أنا في ضهرك ومعاكي دايماً، كملي حكايتك أنا سامعاكي! 🌸";
-
-      if (nobaraLiveReplyEl) nobaraLiveReplyEl.innerText = reply;
-      speakNobara(reply, () => {
-        if (isCallActive) {
-          if (userCallLiveTextEl) userCallLiveTextEl.innerText = "تحدثي، كلامك بيظهر هنا لايف...";
-          startCallSpeechRecognition();
-        }
+      const d = await res.json();
+      if (nobaraLiveReply) nobaraLiveReply.innerText = d.reply;
+      speakNobara(d.reply, () => {
+        if (isCallActive) startCallSpeechRecognition();
       });
     } catch (e) {
-      console.error(e);
-      if (isCallActive) startCallSpeechRecognition();
+      if (nobaraLiveReply) nobaraLiveReply.innerText = "يا روحي معاكي وسامعة كل كلامك العسل ده! 🌸";
+      speakNobara("يا روحي معاكي وسامعة كل كلامك العسل ده!", () => {
+        if (isCallActive) startCallSpeechRecognition();
+      });
     }
   }
 
-  btnEndCall?.addEventListener("click", () => {
-    isCallActive = false;
-    clearInterval(callTimerInterval);
-    try { callRecognizer?.stop(); } catch(e) {}
-    activeCallModal?.classList.add("hidden");
-    const signOff = "باي يا حبيبة قلبي، هتوحشيني وهرن عليكي تاني قريب أوي! 💖🌸";
-    showNobaraMessage(signOff);
-    speakNobara(signOff);
-  });
-
   // -------------------------------------------------------------------------
-  // 6. FEATURE 1: REAL-TIME STREAMING DIARY (كلمة بكلمة لحبيبة)
+  // 8. TAB 1: SMART DIARY (Continuous Voice Dictation + AI Correction)
   // -------------------------------------------------------------------------
   const diaryTextarea = document.getElementById("diary-textarea");
   const diaryMicBtn = document.getElementById("btn-diary-mic");
   const diaryVoiceStatus = document.getElementById("diary-voice-status");
-  const diaryBgOverlay = document.getElementById("diary-bg-overlay");
   const diaryLiveBar = document.getElementById("diary-live-stream-bar");
   const diaryLiveWords = document.getElementById("diary-live-words");
+  const saveDiaryBtn = document.getElementById("btn-save-diary");
+  const clearDiaryBtn = document.getElementById("btn-clear-diary");
 
-  const savedDiary = localStorage.getItem("habiba_diary_text");
-  if (savedDiary && diaryTextarea) {
-    diaryTextarea.value = savedDiary;
-  }
+  const savedDiary = localStorage.getItem("habiba_secret_diary");
+  if (savedDiary && diaryTextarea) diaryTextarea.value = savedDiary;
 
-  document.getElementById("btn-save-diary")?.addEventListener("click", () => {
-    localStorage.setItem("habiba_diary_text", diaryTextarea.value);
-    const msg = "عاش يا حبيبة قلبي! مذكراتك وأسرارك اتحفظت بأمان في دفترنا 🌸💖";
-    showNobaraMessage(msg);
-    speakNobara(msg);
+  saveDiaryBtn?.addEventListener("click", () => {
+    localStorage.setItem("habiba_secret_diary", diaryTextarea.value);
+    showNobaraMessage("حفظت كل مذكراتك وأسرارك في الدفتر بأمان يا حبيبة! 🌸💖", true);
   });
 
-  document.getElementById("btn-clear-diary")?.addEventListener("click", () => {
-    if (confirm("عايزة تمسحي المكتوب في الصفحة دي ونبدأ صفحة جديدة يا حبيبة؟")) {
+  clearDiaryBtn?.addEventListener("click", () => {
+    if (confirm("عايزة تمسحي صفحة المذكرات وتبدأي صفحة بيضاء جديدة؟")) {
       diaryTextarea.value = "";
-      localStorage.removeItem("habiba_diary_text");
-      const msg = "الصفحة بيضاء ونظيفة وجاهزة لمغامرتك وأسرارك الجديدة يا حبيبة! ✨";
-      showNobaraMessage(msg);
-      speakNobara(msg);
+      localStorage.removeItem("habiba_secret_diary");
+      showNobaraMessage("عملتلك صفحة بيضاء جديدة وجميلة.. اكتبي اللي تحبيه! ✨", false);
     }
   });
 
-  let diaryRecognizer = null;
-  let isDiaryRecording = false;
-  let diaryFinalTranscript = "";
   let diaryBaseText = "";
-
-  if (SpeechRecognition) {
-    diaryRecognizer = new SpeechRecognition();
-    diaryRecognizer.lang = "ar-EG";
-    diaryRecognizer.continuous = true;
-    diaryRecognizer.interimResults = true;
-
-    diaryRecognizer.onstart = () => {
-      diaryMicBtn?.classList.add("listening");
+  createPersistentRecognizer({
+    btn: diaryMicBtn,
+    onStart: () => {
+      diaryBaseText = diaryTextarea ? diaryTextarea.value.trim() : "";
       diaryLiveBar?.classList.remove("hidden");
-      diaryVoiceStatus.innerText = "🔴 المايك شغال وسامعك يا حبيبة كلمة بكلمة.. اضغطي لإيقاف التسجيل ⏹️";
-    };
-
-    diaryRecognizer.onresult = (event) => {
-      let interim = "";
-      for (let i = event.resultIndex; i < event.results.length; ++i) {
-        const text = event.results[i][0].transcript;
-        if (event.results[i].isFinal) {
-          diaryFinalTranscript += text + " ";
-        } else {
-          interim += text;
-        }
-      }
-
-      const liveFull = (diaryFinalTranscript + " " + interim).trim();
-      if (diaryLiveWords) diaryLiveWords.innerText = liveFull || "بيسمع صوت حبيبة الآن...";
-
+      if (diaryLiveWords) diaryLiveWords.innerText = "أنا سامعاكي يا بيبو.. احكي براحتك ومش هيقفل إلا لما تضغطي إيقاف ⏹️";
+      if (diaryVoiceStatus) diaryVoiceStatus.innerText = "🔴 التسجيل مفتوح وشغال.. احكي يومياتك كلها وسامعاكي كلمة بكلمة";
+    },
+    onInterim: (full) => {
+      if (diaryLiveWords) diaryLiveWords.innerText = full;
       if (diaryTextarea) {
         const prefix = diaryBaseText ? diaryBaseText + "\n\n" : "";
-        diaryTextarea.value = prefix + liveFull;
+        diaryTextarea.value = prefix + full;
         diaryTextarea.scrollTop = diaryTextarea.scrollHeight;
       }
-    };
-
-    diaryRecognizer.onend = () => {
-      if (isDiaryRecording) {
-        try { diaryRecognizer.start(); } catch (e) {}
-      } else {
-        diaryMicBtn?.classList.remove("listening");
-        diaryLiveBar?.classList.add("hidden");
-        handleDiaryVoiceFinished();
+    },
+    onFinal: async (full) => {
+      diaryLiveBar?.classList.add("hidden");
+      if (!full || full.startsWith("أنا سامعاكي")) {
+        if (diaryVoiceStatus) diaryVoiceStatus.innerText = "اضغطي المايك واحكي.. نوبارا جنبك وسامعاكي! 🌸";
+        return;
       }
-    };
-
-    diaryRecognizer.onerror = (event) => {
-      if (event.error === "no-speech") {
-        diaryVoiceStatus.innerText = "🔴 سامعاكي يا حبيبة.. احكي أول ما تبدأي!";
+      if (diaryVoiceStatus) diaryVoiceStatus.innerText = "نوبارا بتظبط مذكراتك بالعامية المصرية الرقيقة وبترد عليكي... ⚡";
+      try {
+        const res = await fetch("/api/diary/correct-arabic", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ raw_text: full })
+        });
+        const data = await res.json();
+        const prefix = diaryBaseText ? diaryBaseText + "\n\n" : "";
+        if (diaryTextarea) {
+          diaryTextarea.value = prefix + (data.corrected_text || full);
+          localStorage.setItem("habiba_secret_diary", diaryTextarea.value);
+        }
+        if (diaryVoiceStatus) diaryVoiceStatus.innerText = "تم حفظ وترتيب مذكراتك بنجاح! 🌸";
+        showNobaraMessage(data.sensei_reply, true);
+      } catch (err) {
+        if (diaryVoiceStatus) diaryVoiceStatus.innerText = "تم تسجيل مذكراتك بحب 🌸";
+        showNobaraMessage("سجلت كل كلمة قولتيها يا حبيبة قلبي! 💖", true);
       }
-    };
-
-    diaryMicBtn?.addEventListener("click", () => {
-      if (!isDiaryRecording) {
-        isDiaryRecording = true;
-        diaryFinalTranscript = "";
-        diaryBaseText = diaryTextarea.value.trim();
-        if (diaryLiveWords) diaryLiveWords.innerText = "جاهزة وبسمع حبيبة أول بأول...";
-        try { diaryRecognizer.start(); } catch (e) {}
-      } else {
-        isDiaryRecording = false;
-        try { diaryRecognizer.stop(); } catch (e) {}
-      }
-    });
-  }
-
-  async function handleDiaryVoiceFinished() {
-    const spokenText = (diaryFinalTranscript || diaryLiveWords?.innerText || "").trim();
-    if (!spokenText || spokenText.startsWith("جاهزة وبسمع")) {
-      diaryVoiceStatus.innerText = "اضغطي المايك واحكي.. نوبارا جنبك وسامعاكي! 🌸";
-      return;
     }
+  });
 
-    diaryVoiceStatus.innerText = "نوبارا بتسمعك وبتظبطلك الرد بالمصري يا حبيبة... 🪄";
-    showNobaraMessage("سمعتك كويس أوي يا بيبو.. بجهزلك الرد الجميل دلوقتي ⏳");
-
-    try {
-      const response = await fetch("/api/diary/correct-arabic", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ raw_text: spokenText }),
-      });
-      const data = await response.json();
-
-      const nobaraReply = data.sensei_reply || "يا حبيبة قلبي سمعتك وسجلت كل كلمة في دفترنا السحري 💖🌸";
-      const corrected = data.corrected_text || spokenText;
-
-      showNobaraMessage(nobaraReply);
-      speakNobara(nobaraReply);
-
-      const prefix = diaryBaseText ? diaryBaseText + "\n\n" : "";
-      diaryTextarea.value = prefix + corrected;
-      localStorage.setItem("habiba_diary_text", diaryTextarea.value);
-
-      diaryVoiceStatus.innerText = "تمت الصياغة بالعامية المصرية وتسجيل مذكراتك بنجاح! 🌸";
-    } catch (err) {
-      console.error(err);
-      diaryVoiceStatus.innerText = "تم حفظ الكلام المسجل في الدفتر 🌸";
-    }
-  }
-
-  // -------------------------------------------------------------------------
-  // 7. Background AI Drawer
-  // -------------------------------------------------------------------------
-  const bgDrawer = document.getElementById("bg-drawer");
-  const btnToggleBg = document.getElementById("btn-toggle-bg-drawer");
-  const btnCloseDrawer = document.getElementById("btn-close-drawer");
-  const bgInput = document.getElementById("bg-scene-input");
+  // Background Scene Mic with Persistent Recognizer
   const bgMicBtn = document.getElementById("btn-bg-mic");
+  const bgInput = document.getElementById("bg-scene-input");
   const generateBgBtn = document.getElementById("btn-generate-bg");
+  const diaryBgOverlay = document.getElementById("diary-bg-overlay");
+  const bgDrawer = document.getElementById("bg-drawer");
+  const btnToggleBgDrawer = document.getElementById("btn-toggle-bg-drawer");
+  const btnCloseDrawer = document.getElementById("btn-close-drawer");
 
-  btnToggleBg?.addEventListener("click", () => {
-    bgDrawer?.classList.toggle("hidden");
-  });
-  btnCloseDrawer?.addEventListener("click", () => {
-    bgDrawer?.classList.add("hidden");
-  });
+  btnToggleBgDrawer?.addEventListener("click", () => bgDrawer?.classList.toggle("hidden"));
+  btnCloseDrawer?.addEventListener("click", () => bgDrawer?.classList.add("hidden"));
 
-  document.querySelectorAll(".preset-chip").forEach((chip) => {
-    chip.addEventListener("click", () => {
-      const prompt = chip.getAttribute("data-prompt");
-      if (bgInput) bgInput.value = prompt;
-      triggerBgGeneration(prompt);
-    });
-  });
-
-  const savedBg = localStorage.getItem("habiba_diary_bg");
-  if (savedBg && diaryBgOverlay) {
-    diaryBgOverlay.style.backgroundImage = `url('${savedBg}')`;
-  }
-
-  async function triggerBgGeneration(sceneText) {
-    if (!sceneText || !sceneText.trim()) return;
-    const msg = `برسملك خلفية أنمي قمر عن: "${sceneText}" يا حبيبة... 🎨`;
-    showNobaraMessage(msg);
-    speakNobara("ثانية واحدة ونوبارا هتغيرلك الخلفية لأجمل منظر أنمي!");
-
-    try {
-      const res = await fetch("/api/diary/generate-background", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ scene_description: sceneText }),
-      });
-      const data = await res.json();
-      if (data.image_url) {
-        const img = new Image();
-        img.onload = () => {
-          diaryBgOverlay.style.backgroundImage = `url('${data.image_url}')`;
-          localStorage.setItem("habiba_diary_bg", data.image_url);
-          const doneMsg = "شوفي الخلفية الأنمي بقت ورا مذكراتنا إزاي يا بيبو! واو بجد 🌸💖";
-          showNobaraMessage(doneMsg);
-          speakNobara(doneMsg);
-          bgDrawer?.classList.add("hidden");
-        };
-        img.src = data.image_url;
-      }
-    } catch (e) {
-      console.error(e);
+  createPersistentRecognizer({
+    btn: bgMicBtn,
+    onStart: () => {
+      if (bgInput) bgInput.placeholder = "🔴 سامعاكي.. قولي وصف الخلفية واضغطي إيقاف لما تخلصي ⏹️";
+    },
+    onInterim: (full) => {
+      if (bgInput) bgInput.value = full;
+    },
+    onFinal: (full) => {
+      if (full) triggerBgGeneration(full);
     }
-  }
+  });
 
   generateBgBtn?.addEventListener("click", () => {
     triggerBgGeneration(bgInput?.value);
   });
 
-  if (SpeechRecognition) {
-    const bgRec = new SpeechRecognition();
-    bgRec.lang = "ar-EG";
-    bgRec.onresult = (e) => {
-      const txt = e.results[0][0].transcript;
-      if (bgInput) bgInput.value = txt;
-      triggerBgGeneration(txt);
-    };
-    bgMicBtn?.addEventListener("click", () => {
-      try { bgRec.start(); } catch (e) { bgRec.stop(); }
-    });
+  function triggerBgGeneration(prompt) {
+    if (!prompt) return;
+    showNobaraMessage("برسم لكِ خلفية أنمي قمر زي ما طلبتي... 🎨", false);
+    fetch("/api/diary/generate-background", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ scene_description: prompt })
+    })
+      .then(r => r.json())
+      .then(d => {
+        if (diaryBgOverlay && d.image_url) {
+          diaryBgOverlay.style.backgroundImage = `url('${d.image_url}')`;
+          diaryBgOverlay.classList.add("has-bg");
+          showNobaraMessage("الخلفية جهزت وبقت سحرية في دفترك يا بيبو! 🌸✨", true);
+        }
+      })
+      .catch(() => {
+        showNobaraMessage("حبيبة يا قمر، هحاول أرسمها تاني بعد شوية! 🌸", false);
+      });
   }
 
   // -------------------------------------------------------------------------
-  // 8. FEATURE 2: SMART VOICE TABLE (7 Columns + Master Mic)
+  // 9. TAB 2: SMART VOICE TABLE (Dynamic Columns + Continuous Dictation)
   // -------------------------------------------------------------------------
-  const tableMasterMicBtn = document.getElementById("btn-table-master-mic");
+  const missionsTable = document.getElementById("missions-table");
   const tableBody = document.getElementById("table-body");
-  const tableVoiceStatus = document.getElementById("table-voice-status");
+  const btnTableSetupMic = document.getElementById("btn-table-setup-mic");
+  const btnTableContinuousMic = document.getElementById("btn-table-continuous-mic");
+  const tableSetupStatus = document.getElementById("table-setup-status");
+  const tableContinuousStatus = document.getElementById("table-continuous-status");
   const tableLiveBar = document.getElementById("table-live-stream-bar");
   const tableLiveWords = document.getElementById("table-live-words");
   const btnAddManualRow = document.getElementById("btn-add-manual-row");
   const btnClearTable = document.getElementById("btn-clear-table");
 
-  const savedTable = localStorage.getItem("habiba_table_rows");
-  if (savedTable && tableBody) {
-    tableBody.innerHTML = savedTable;
+  let tableHeaders = ["المهمة / الدرس 🎯", "الميعاد ⏰", "اليوم 📅", "المكان 📍", "الملاحظات 📝"];
+  const savedHeaders = localStorage.getItem("habiba_table_headers");
+  if (savedHeaders) {
+    try {
+      tableHeaders = JSON.parse(savedHeaders);
+      renderTableHeaders();
+    } catch (e) {}
+  }
+
+  const savedRows = localStorage.getItem("habiba_table_rows");
+  if (savedRows && tableBody) {
+    tableBody.innerHTML = savedRows;
     bindTableEvents();
   }
 
+  function renderTableHeaders() {
+    if (!missionsTable) return;
+    const thead = missionsTable.querySelector("thead");
+    if (!thead) return;
+    let ths = "";
+    tableHeaders.forEach(h => {
+      ths += `<th>${h}</th>`;
+    });
+    ths += `<th class="col-actions">حذف</th>`;
+    thead.innerHTML = `<tr>${ths}</tr>`;
+  }
+
   function saveTableToStorage() {
-    localStorage.setItem("habiba_table_rows", tableBody.innerHTML);
-  }
-
-  let tableRecognizer = null;
-  let isTableRecording = false;
-  let tableFinalTranscript = "";
-
-  if (SpeechRecognition) {
-    tableRecognizer = new SpeechRecognition();
-    tableRecognizer.lang = "ar-EG";
-    tableRecognizer.continuous = true;
-    tableRecognizer.interimResults = true;
-
-    tableRecognizer.onstart = () => {
-      tableMasterMicBtn?.classList.add("listening");
-      tableLiveBar?.classList.remove("hidden");
-      tableVoiceStatus.innerText = "🔴 سامعاكي يا حبيبة وبفرّغ مهمتك كلمة بكلمة.. اضغطي لإيقاف التسجيل ⏹️";
-    };
-
-    tableRecognizer.onresult = (event) => {
-      let interim = "";
-      for (let i = event.resultIndex; i < event.results.length; ++i) {
-        const text = event.results[i][0].transcript;
-        if (event.results[i].isFinal) {
-          tableFinalTranscript += text + " ";
-        } else {
-          interim += text;
-        }
-      }
-      const stream = (tableFinalTranscript + " " + interim).trim();
-      if (tableLiveWords) tableLiveWords.innerText = stream;
-    };
-
-    tableRecognizer.onend = () => {
-      if (isTableRecording) {
-        try { tableRecognizer.start(); } catch (e) {}
-      } else {
-        tableMasterMicBtn?.classList.remove("listening");
-        tableLiveBar?.classList.add("hidden");
-        handleTableVoiceFinished();
-      }
-    };
-
-    tableMasterMicBtn?.addEventListener("click", () => {
-      if (!isTableRecording) {
-        isTableRecording = true;
-        tableFinalTranscript = "";
-        if (tableLiveWords) tableLiveWords.innerText = "سامعاكي يا حبيبة.. قولي ميعادك ومكانك وكل تفاصيلك!";
-        try { tableRecognizer.start(); } catch (e) {}
-      } else {
-        isTableRecording = false;
-        try { tableRecognizer.stop(); } catch (e) {}
-      }
-    });
-  }
-
-  async function handleTableVoiceFinished() {
-    const spoken = (tableFinalTranscript || tableLiveWords?.innerText || "").trim();
-    if (!spoken || spoken.startsWith("سامعاكي")) {
-      tableVoiceStatus.innerText = "جاهزة للاستماع لمهمتك يا حبيبة..";
-      return;
-    }
-
-    tableVoiceStatus.innerText = "جاري فهم المهمة وتوزيعها في الأعمدة الـ 7... ⏳";
-
-    try {
-      const res = await fetch("/api/table/parse-task", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ speech_text: spoken }),
-      });
-      const rowData = await res.json();
-      addTableRow(rowData);
-
-      tableVoiceStatus.innerText = "تمت إضافة المهمة إلى جدولك بنجاح! ⚡";
-      const reply = `شاطرة يا حبيبة قلبي! سجلتلك مهمة "${rowData.task}" في ميعادها ومكانها 🎯`;
-      showNobaraMessage(reply);
-      speakNobara(reply);
-    } catch (err) {
-      console.error(err);
-      tableVoiceStatus.innerText = "حصل خطأ، اضغطي المايك وجربي تاني 🌸";
-    }
-  }
-
-  function addTableRow(data) {
-    const tr = document.createElement("tr");
-    tr.innerHTML = `
-      <td contenteditable="true">${data.task || "مهمة جديدة"}</td>
-      <td contenteditable="true">${data.time || "5:00 م"}</td>
-      <td contenteditable="true">${data.date || "اليوم"}</td>
-      <td contenteditable="true">${data.location || "-"}</td>
-      <td contenteditable="true">${data.tools || "-"}</td>
-      <td contenteditable="true">${data.notes || "-"}</td>
-      <td>
-        <select class="status-select">
-          <option value="pending" selected>⚡ قيد التنفيذ</option>
-          <option value="done">✨ تمت بنجاح</option>
-          <option value="delayed">⏳ مؤجلة</option>
-        </select>
-      </td>
-      <td><button class="btn-del-row" title="حذف">🗑️</button></td>
-    `;
-    tableBody?.prepend(tr);
-    bindRowEvents(tr);
-    saveTableToStorage();
-  }
-
-  function bindRowEvents(row) {
-    row.querySelector(".btn-del-row")?.addEventListener("click", () => {
-      row.remove();
-      saveTableToStorage();
-    });
-    row.querySelectorAll('td[contenteditable="true"]').forEach((cell) => {
-      cell.addEventListener("blur", saveTableToStorage);
-    });
-    row.querySelector(".status-select")?.addEventListener("change", saveTableToStorage);
+    if (tableBody) localStorage.setItem("habiba_table_rows", tableBody.innerHTML);
+    localStorage.setItem("habiba_table_headers", JSON.stringify(tableHeaders));
   }
 
   function bindTableEvents() {
-    tableBody?.querySelectorAll("tr").forEach(bindRowEvents);
+    if (!tableBody) return;
+    tableBody.querySelectorAll(".btn-del-row").forEach(btn => {
+      btn.onclick = () => {
+        btn.closest("tr")?.remove();
+        saveTableToStorage();
+      };
+    });
+    tableBody.querySelectorAll("td[contenteditable='true']").forEach(td => {
+      td.onblur = () => saveTableToStorage();
+    });
   }
-  bindTableEvents();
+
+  // Mic 1: Setup Column Headers with Continuous Persistent Recognizer
+  createPersistentRecognizer({
+    btn: btnTableSetupMic,
+    onStart: () => {
+      tableLiveBar?.classList.remove("hidden");
+      if (tableLiveWords) tableLiveWords.innerText = "سامعاكي.. قولي مثلاً: 1 اليوم، 2 المادة، 3 ميعاد الدرس، 4 المكان...";
+      if (tableSetupStatus) tableSetupStatus.innerText = "🔴 التسجيل مفتوح.. حددي الأعمدة واضغطي إيقاف لما تخلصي ⏹️";
+    },
+    onInterim: (full) => {
+      if (tableLiveWords) tableLiveWords.innerText = full;
+    },
+    onFinal: async (full) => {
+      tableLiveBar?.classList.add("hidden");
+      if (!full || full.startsWith("سامعاكي")) {
+        if (tableSetupStatus) tableSetupStatus.innerText = "اضغطي لتحديد الخانات";
+        return;
+      }
+      if (tableSetupStatus) tableSetupStatus.innerText = "نوبارا بترتب أعمدة جدولك... ⏳";
+      try {
+        const res = await fetch("/api/table/setup-headers", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ raw_speech: full })
+        });
+        const d = await res.json();
+        if (d.headers && d.headers.length >= 2) {
+          tableHeaders = d.headers;
+          renderTableHeaders();
+          saveTableToStorage();
+          if (tableSetupStatus) tableSetupStatus.innerText = `تم تجهيز ${d.headers.length} خانات بنجاح! 🌸`;
+          showNobaraMessage(d.reply, true);
+        }
+      } catch (err) {
+        if (tableSetupStatus) tableSetupStatus.innerText = "اضغطي وجربي تاني يا بيبو 🌸";
+      }
+    }
+  });
+
+  // Mic 2: Continuous Open Live Dictation into Table Rows
+  createPersistentRecognizer({
+    btn: btnTableContinuousMic,
+    onStart: () => {
+      tableLiveBar?.classList.remove("hidden");
+      if (tableLiveWords) tableLiveWords.innerText = "🔴 نوبارا سامعاكي ومفتوحة علطول.. املي بياناتك كلمة بكلمة ومش هيقفل إلا لما تضغطي إيقاف ⏹️";
+      if (tableContinuousStatus) tableContinuousStatus.innerText = "🔴 التفريغ المفتوح شغال.. احكي كل تفاصيلك وسامعاكي كلمة بكلمة";
+    },
+    onInterim: (full) => {
+      if (tableLiveWords) tableLiveWords.innerText = full;
+    },
+    onFinal: async (full) => {
+      tableLiveBar?.classList.add("hidden");
+      if (!full || full.startsWith("🔴 نوبارا سامعاكي")) {
+        if (tableContinuousStatus) tableContinuousStatus.innerText = "جاهز للتفريغ المستمر..";
+        return;
+      }
+      if (tableContinuousStatus) tableContinuousStatus.innerText = "نوبارا بتفرغ البيانات في الخانات المناسبة... ⚡";
+      try {
+        const res = await fetch("/api/table/fill-rows", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ raw_speech: full, headers: tableHeaders })
+        });
+        const d = await res.json();
+        if (d.rows && d.rows.length > 0) {
+          d.rows.forEach(r => {
+            const tr = document.createElement("tr");
+            let tds = "";
+            for (let idx = 0; idx < tableHeaders.length; idx++) {
+              const val = r[idx] || "-";
+              tds += `<td contenteditable="true">${val}</td>`;
+            }
+            tds += `<td><button class="btn-del-row" title="حذف">🗑️</button></td>`;
+            tr.innerHTML = tds;
+            tableBody?.appendChild(tr);
+          });
+          bindTableEvents();
+          saveTableToStorage();
+          if (tableContinuousStatus) tableContinuousStatus.innerText = "تم تفريغ البيانات في الجدول بنجاح! ⚡";
+          showNobaraMessage(d.reply, true);
+        }
+      } catch (err) {
+        if (tableContinuousStatus) tableContinuousStatus.innerText = "اضغطي المايك للتفريغ تاني يا روحي 🌸";
+      }
+    }
+  });
 
   btnAddManualRow?.addEventListener("click", () => {
-    addTableRow({
-      task: "مهمة جديدة مع نوبارا",
-      time: "الساعة ...",
-      date: "غداً",
-      location: "النادي",
-      tools: "الشنطة",
-      notes: "تسجيل يدوي",
-      status: "قيد التنفيذ"
-    });
+    if (!tableBody) return;
+    const tr = document.createElement("tr");
+    let tds = "";
+    for (let idx = 0; idx < tableHeaders.length; idx++) {
+      tds += `<td contenteditable="true">جديد</td>`;
+    }
+    tds += `<td><button class="btn-del-row" title="حذف">🗑️</button></td>`;
+    tr.innerHTML = tds;
+    tableBody.appendChild(tr);
+    bindTableEvents();
+    saveTableToStorage();
   });
 
   btnClearTable?.addEventListener("click", () => {
-    if (confirm("عايزة تمسحي كل المهام وتبدئي جدول جديد يا حبيبة؟")) {
+    if (confirm("عايزة تمسحي كل البيانات اللي في الجدول وتبدأي من الأول؟")) {
       if (tableBody) tableBody.innerHTML = "";
       localStorage.removeItem("habiba_table_rows");
-      const msg = "الجدول بقى فاضي وجاهز لمهماتك الجديدة يا بيبو! 🎯";
-      showNobaraMessage(msg);
-      speakNobara(msg);
+      showNobaraMessage("مسحت الجدول وبقى جاهز لمغامراتك الجديدة يا قمر! 🌸", false);
     }
   });
 
   // -------------------------------------------------------------------------
-  // 9. FEATURE 3: MAGIC ANIME STUDIO (Polaroid Cards)
+  // 10. TAB 3: MAGIC ANIME STUDIO (Persistent Voice Prompt + Polaroid)
   // -------------------------------------------------------------------------
   const studioInput = document.getElementById("studio-prompt-input");
   const studioMicBtn = document.getElementById("btn-studio-mic");
   const studioGenerateBtn = document.getElementById("btn-generate-image");
-  const studioGallery = document.getElementById("polaroid-gallery");
+  const polaroidGallery = document.getElementById("polaroid-gallery");
   const studioLoader = document.getElementById("studio-loader");
 
-  document.querySelectorAll(".studio-chip").forEach((chip) => {
-    chip.addEventListener("click", () => {
-      const prompt = chip.getAttribute("data-prompt");
-      if (studioInput) studioInput.value = prompt;
-      generateStudioImage(prompt);
-    });
-  });
-
-  async function generateStudioImage(promptText) {
-    if (!promptText || !promptText.trim()) return;
-    studioLoader?.classList.remove("hidden");
-    if (studioGenerateBtn) studioGenerateBtn.disabled = true;
-
-    const startMsg = `بيتم رسم صورة أنمي أسطورية عن: "${promptText}" يا حبيبة... ⚡`;
-    showNobaraMessage(startMsg);
-    speakNobara("نوبارا بتجهز ضربة الجوجوتسو وترسم صورتك دلوقتي يا بيبو!");
-
-    try {
-      const res = await fetch("/api/studio/generate-image", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt: promptText }),
-      });
-      const data = await res.json();
-      if (data.image_url) {
-        addPolaroidCard(data.image_url, data.prompt);
-        const doneMsg = "شوفي الصورة الأنمي القمر نزلت في معرضنا يا حبيبة! 🌸✨";
-        showNobaraMessage(doneMsg);
-        speakNobara(doneMsg);
-      }
-    } catch (e) {
-      console.error(e);
-    } finally {
-      studioLoader?.classList.add("hidden");
-      if (studioGenerateBtn) studioGenerateBtn.disabled = false;
+  createPersistentRecognizer({
+    btn: studioMicBtn,
+    onStart: () => {
+      if (studioInput) studioInput.placeholder = "🔴 سامعاكي.. وصفي صورتك براحتك واضغطي إيقاف لما تخلصي ⏹️";
+    },
+    onInterim: (full) => {
+      if (studioInput) studioInput.value = full;
+    },
+    onFinal: (full) => {
+      if (full) generateStudioImage(full);
     }
-  }
-
-  function addPolaroidCard(url, prompt) {
-    const card = document.createElement("div");
-    card.className = "polaroid-card";
-    const colors = ["washi-purple", "washi-blue"];
-    const chosenColor = colors[Math.floor(Math.random() * colors.length)];
-    card.innerHTML = `
-      <div class="washi-tape ${chosenColor}"></div>
-      <div class="polaroid-frame">
-        <img src="${url}" alt="${prompt}" loading="lazy">
-      </div>
-      <div class="polaroid-caption">
-        <span class="caption-text">${prompt} 🌸</span>
-        <span class="caption-date">خاص لدفتر حبيبة ونوبارا</span>
-      </div>
-    `;
-    studioGallery?.prepend(card);
-  }
+  });
 
   studioGenerateBtn?.addEventListener("click", () => {
     generateStudioImage(studioInput?.value);
   });
 
-  if (SpeechRecognition) {
-    const studioRec = new SpeechRecognition();
-    studioRec.lang = "ar-EG";
-    studioRec.onresult = (e) => {
-      const txt = e.results[0][0].transcript;
-      if (studioInput) studioInput.value = txt;
-      generateStudioImage(txt);
-    };
-    studioMicBtn?.addEventListener("click", () => {
-      try { studioRec.start(); } catch (e) { studioRec.stop(); }
-    });
+  function generateStudioImage(prompt) {
+    if (!prompt) return;
+    studioLoader?.classList.remove("hidden");
+    showNobaraMessage("برسم الصورة السحرية في استوديو الأنمي... 🎨⚡", false);
+
+    fetch("/api/studio/generate-image", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prompt: prompt })
+    })
+      .then(r => r.json())
+      .then(d => {
+        studioLoader?.classList.add("hidden");
+        if (d.image_url && polaroidGallery) {
+          const card = document.createElement("div");
+          card.className = "polaroid-card";
+          card.innerHTML = `
+            <div class="washi-tape washi-purple"></div>
+            <div class="polaroid-frame">
+              <img src="${d.image_url}" alt="${d.prompt}" loading="lazy">
+            </div>
+            <div class="polaroid-caption">
+              <span class="caption-text">${d.caption || d.prompt}</span>
+              <span class="caption-date">خاص لدفتر حبيبة 🌸</span>
+            </div>
+          `;
+          polaroidGallery.prepend(card);
+          showNobaraMessage("الصورة جهزت ونزلت في ألبومك يا حبيبة قلبي! 💖✨", true);
+        }
+      })
+      .catch(() => {
+        studioLoader?.classList.add("hidden");
+        showNobaraMessage("حبيبة يا روحي، هنجرب نرسمها تاني بعد ثواني! 🌸", false);
+      });
   }
 
   // -------------------------------------------------------------------------
-  // 10. PWA & Service Worker Registration + One-Click Install Handler
+  // 11. PWA & Service Worker Registration
   // -------------------------------------------------------------------------
   if ("serviceWorker" in navigator) {
-    navigator.serviceWorker.register("/sw.js").catch((err) => {
-      console.warn("SW error:", err);
-    });
+    navigator.serviceWorker.register("/sw.js").catch(e => console.warn("SW error:", e));
   }
 
-  let deferredInstallPrompt = null;
+  let deferredPrompt = null;
   const btnPwaInstall = document.getElementById("btn-pwa-install");
-
   window.addEventListener("beforeinstallprompt", (e) => {
     e.preventDefault();
-    deferredInstallPrompt = e;
+    deferredPrompt = e;
     if (btnPwaInstall) btnPwaInstall.style.display = "inline-flex";
   });
 
   btnPwaInstall?.addEventListener("click", async () => {
-    if (deferredInstallPrompt) {
-      deferredInstallPrompt.prompt();
-      const { outcome } = await deferredInstallPrompt.userChoice;
-      if (outcome === "accepted") {
+    if (deferredPrompt) {
+      deferredPrompt.prompt();
+      const choice = await deferredPrompt.userChoice;
+      if (choice.outcome === "accepted") {
         if (btnPwaInstall) btnPwaInstall.style.display = "none";
       }
-      deferredInstallPrompt = null;
+      deferredPrompt = null;
     } else {
-      alert("لتثبيت تطبيق نوبارا على شاشة موبايلك:\n1. اضغطي على القائمة (الثلاث نقط ⋮ فوق في المتصفح).\n2. اختاري 'تثبيت التطبيق' أو 'إضافة للشاشة الرئيسية' (Add to Home screen) 📲🌸");
+      alert("لتثبيت التطبيق على الموبايل:\nاضغطي على زر المشاركة (Share) في المتصفح، ثم اختاري (إضافة إلى الشاشة الرئيسية / Add to Home Screen) 📲✨");
     }
   });
+
+  // Welcome greeting
+  setTimeout(() => {
+    speakNobara("أهلاً يا حبيبة قلبي! أنا نوبارا صاحبتك الأنتيم، وحشتيني أوي.. مستنياكي نحكي ونرتب يومك سوا!");
+  }, 1000);
 });

@@ -5,32 +5,42 @@
 
 document.addEventListener("DOMContentLoaded", () => {
   // -------------------------------------------------------------------------
-  // 1. Text-To-Speech (Nobara Bestie Voice Output in Warm Egyptian Arabic)
+  // 1. Text-To-Speech (Official Google TTS Voice Output)
   // -------------------------------------------------------------------------
+  let currentGoogleAudio = null;
   function speakNobara(text, onEnd) {
-    if (!('speechSynthesis' in window)) {
+    if (!text || !text.trim()) {
       if (onEnd) onEnd();
       return;
     }
     try {
-      window.speechSynthesis.cancel();
-      const utterance = new SpeechSynthesisUtterance(text);
-      utterance.lang = "ar-EG";
-      utterance.rate = 1.05;
-      utterance.pitch = 1.15; // Cheerful, sweet female tone
-
-      const voices = window.speechSynthesis.getVoices();
-      const arVoice = voices.find(v => v.lang.startsWith("ar"));
-      if (arVoice) utterance.voice = arVoice;
-
-      if (onEnd) {
-        utterance.onend = onEnd;
-        utterance.onerror = onEnd;
+      if (currentGoogleAudio) {
+        currentGoogleAudio.pause();
+        currentGoogleAudio = null;
       }
-
-      window.speechSynthesis.speak(utterance);
-    } catch (e) {
-      console.warn("TTS error:", e);
+      const clean = text.replace(/[#*`~_]/g, "").trim();
+      const url = `/api/tts?text=${encodeURIComponent(clean)}`;
+      currentGoogleAudio = new Audio(url);
+      if (onEnd) {
+        currentGoogleAudio.onended = () => { currentGoogleAudio = null; onEnd(); };
+        currentGoogleAudio.onerror = () => { currentGoogleAudio = null; onEnd(); };
+      }
+      currentGoogleAudio.play().catch(e => {
+        console.warn("Google TTS audio play catch:", e);
+        if ('speechSynthesis' in window) {
+          const u = new SpeechSynthesisUtterance(clean);
+          u.lang = 'ar-EG';
+          const voices = window.speechSynthesis.getVoices();
+          const googleVoice = voices.find(v => (v.name.includes("Google") || v.name.includes("عربية")) && v.lang.startsWith("ar"));
+          if (googleVoice) u.voice = googleVoice;
+          if (onEnd) u.onend = onEnd;
+          window.speechSynthesis.speak(u);
+        } else if (onEnd) {
+          onEnd();
+        }
+      });
+    } catch (err) {
+      console.warn("TTS error:", err);
       if (onEnd) onEnd();
     }
   }
@@ -83,21 +93,27 @@ document.addEventListener("DOMContentLoaded", () => {
   // -------------------------------------------------------------------------
   // 3. Tab Switching System (Bookmark Ribbons)
   // -------------------------------------------------------------------------
-  const tabs = document.querySelectorAll(".tab-ribbon");
+  const allTabs = document.querySelectorAll(".tab-ribbon, .nav-tab");
   const tabContents = document.querySelectorAll(".tab-content");
 
-  tabs.forEach((tab) => {
+  allTabs.forEach((tab) => {
     tab.addEventListener("click", () => {
-      tabs.forEach((t) => t.classList.remove("active"));
-      tabContents.forEach((c) => c.classList.remove("active"));
-
-      tab.classList.add("active");
       const targetId = tab.getAttribute("data-tab");
-      const targetContent = document.getElementById(targetId);
-      if (targetContent) {
-        targetContent.classList.add("active");
-      }
+      if (!targetId) return;
+
+      allTabs.forEach((t) => {
+        t.classList.toggle("active", t.getAttribute("data-tab") === targetId);
+      });
+      tabContents.forEach((c) => {
+        c.classList.toggle("active", c.id === targetId);
+      });
+      window.scrollTo({ top: 0, behavior: "smooth" });
     });
+  });
+
+  document.getElementById("btn-slot-start-call")?.addEventListener("click", () => {
+    startRingtone();
+    showIncomingCallModal();
   });
 
   // Mood selector

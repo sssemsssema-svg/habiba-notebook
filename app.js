@@ -7,46 +7,243 @@ document.addEventListener("DOMContentLoaded", () => {
   // -------------------------------------------------------------------------
   // 1. Text-To-Speech (Official Google AI Studio TTS Voice Output - Egyptian Dialect)
   // -------------------------------------------------------------------------
-  let isNobaraSpeaking = false;
-  let currentGoogleAudio = null;
+  // -------------------------------------------------------------------------
+  // 1. Unified Singleton Voice & Speech Engine (Zero-Conflict Mobile Architecture)
+  // -------------------------------------------------------------------------
 
-  function speakNobara(text, onEnd, audioUrl = null) {
-    if (!text || !text.trim()) {
-      if (onEnd) onEnd();
-      return;
-    }
-    try {
-      if (currentGoogleAudio) {
-        currentGoogleAudio.pause();
-        currentGoogleAudio = null;
+  const VoiceManager = {
+    activeSessionId: null,
+    activeBtn: null,
+    recognition: null,
+    isListening: false,
+    isNobaraSpeaking: false,
+    currentAudio: null,
+    silenceTimer: null,
+    activeHandlers: null,
+
+    stopListening(triggerFinal = false) {
+      if (this.silenceTimer) {
+        clearTimeout(this.silenceTimer);
+        this.silenceTimer = null;
       }
-      isNobaraSpeaking = true;
-      const clean = text.replace(/[#*`~_]/g, "").trim();
-      const url = audioUrl || `/api/tts?text=${encodeURIComponent(clean)}&voice=Aoede`;
-      currentGoogleAudio = new Audio(url);
-      // Lively, enthusiastic anime bestie speed (+8%)
-      currentGoogleAudio.playbackRate = 1.08;
+      if (this.activeBtn) {
+        this.activeBtn.classList.remove("listening", "pulse-red", "speaking");
+      }
+      const handlers = this.activeHandlers;
+      const wasListening = this.isListening;
+      const rec = this.recognition;
 
-      const finishHandler = () => {
-        currentGoogleAudio = null;
-        // Resume mic listening after audio finishes (echo prevention)
-        setTimeout(() => { isNobaraSpeaking = false; }, 350);
-        if (onEnd) onEnd();
+      this.isListening = false;
+      this.recognition = null;
+      this.activeSessionId = null;
+      this.activeBtn = null;
+      this.activeHandlers = null;
+
+      if (rec) {
+        try {
+          rec.onresult = null;
+          rec.onerror = null;
+          rec.onend = null;
+          rec.abort();
+        } catch (e) {}
+      }
+
+      if (wasListening && handlers && handlers.onStop) {
+        handlers.onStop();
+      }
+    },
+
+    startListening({
+      sessionId,
+      btn,
+      onStart,
+      onInterim,
+      onFinal,
+      onStop,
+      autoSendSilenceMs = 0
+    }) {
+      if (!SpeechRecognition) {
+        console.warn("SpeechRecognition not supported on this device/browser");
+        return;
+      }
+
+      // Echo prevention: never capture mic while phone speaker is playing Nobara's voice
+      if (this.isNobaraSpeaking) {
+        console.warn("Cannot start mic while Nobara is speaking");
+        return;
+      }
+
+      // Hard stop any previous active recognition session (Strict Mutual Exclusion)
+      this.stopListening(false);
+
+      this.activeSessionId = sessionId;
+      this.activeBtn = btn;
+      this.activeHandlers = { onStart, onInterim, onFinal, onStop };
+
+      let committedHistory = "";
+      let lastInterim = "";
+
+      const rec = new SpeechRecognition();
+      rec.lang = "ar-EG";
+      rec.continuous = true;
+      rec.interimResults = true;
+
+      rec.onstart = () => {
+        this.isListening = true;
+        if (btn) btn.classList.add("listening", "pulse-red", "speaking");
+        if (onStart) onStart();
       };
 
-      currentGoogleAudio.onended = finishHandler;
-      currentGoogleAudio.onerror = finishHandler;
-      currentGoogleAudio.play().catch(e => {
-        console.warn("Audio autoplay blocked by browser policy:", e);
-        isNobaraSpeaking = false;
+      rec.onresult = (e) => {
+        if (this.isNobaraSpeaking) return;
+
+        let currentFinal = "";
+        let currentInterim = "";
+        for (let i = 0; i < e.results.length; ++i) {
+          const item = e.results[i];
+          if (item.isFinal) {
+            currentFinal += item[0].transcript + " ";
+          } else {
+            currentInterim += item[0].transcript;
+          }
+        }
+
+        const rawFull = (committedHistory + " " + currentFinal + " " + currentInterim).trim();
+        const cleanFull = deduplicateSpeech(rawFull);
+        lastInterim = cleanFull;
+
+        if (onInterim) {
+          onInterim(cleanFull, currentInterim, deduplicateSpeech((committedHistory + " " + currentFinal).trim()));
+        }
+
+        if (autoSendSilenceMs > 0 && cleanFull.length > 1) {
+          if (this.silenceTimer) clearTimeout(this.silenceTimer);
+          this.silenceTimer = setTimeout(() => {
+            if (this.isListening && this.activeSessionId === sessionId) {
+              const textToSend = lastInterim;
+              this.stopListening(false);
+              if (onFinal) onFinal(textToSend);
+            }
+          }, autoSendSilenceMs);
+        }
+      };
+
+      rec.onend = () => {
+        if (this.isListening && this.activeSessionId === sessionId) {
+          if (autoSendSilenceMs > 0 && lastInterim && lastInterim.length > 1) {
+            const textToSend = lastInterim;
+            this.stopListening(false);
+            if (onFinal) onFinal(textToSend);
+          } else {
+            // Clean single restart if continuous session is expected
+            setTimeout(() => {
+              if (this.isListening && this.activeSessionId === sessionId && !this.isNobaraSpeaking) {
+                try {
+                  const freshRec = new SpeechRecognition();
+                  freshRec.lang = "ar-EG";
+                  freshRec.continuous = true;
+                  freshRec.interimResults = true;
+                  freshRec.onstart = rec.onstart;
+                  freshRec.onresult = rec.onresult;
+                  freshRec.onend = rec.onend;
+                  freshRec.onerror = rec.onerror;
+                  this.recognition = freshRec;
+                  freshRec.start();
+                } catch (err) {
+                  this.stopListening(false);
+                }
+              }
+            }, 300);
+          }
+        }
+      };
+
+      rec.onerror = (e) => {
+        console.warn(`Voice session [${sessionId}] status:`, e.error);
+        if (e.error === "not-allowed" || e.error === "service-not-allowed") {
+          this.stopListening(false);
+        }
+      };
+
+      this.recognition = rec;
+      try {
+        rec.start();
+      } catch (err) {
+        console.error("Failed to start speech recognition:", err);
+        this.stopListening(false);
+      }
+    },
+
+    toggle({ sessionId, btn, onStart, onInterim, onFinal, onStop, autoSendSilenceMs = 0 }) {
+      if (this.isListening && this.activeSessionId === sessionId) {
+        const lastText = btn?.dataset?.lastText || "";
+        this.stopListening(true);
+        if (onFinal && lastText) onFinal(lastText);
+      } else {
+        this.startListening({
+          sessionId,
+          btn,
+          onStart,
+          onInterim: (full, interim, final) => {
+            if (btn) btn.dataset.lastText = full;
+            if (onInterim) onInterim(full, interim, final);
+          },
+          onFinal: (full) => {
+            if (btn) btn.dataset.lastText = "";
+            if (onFinal) onFinal(full);
+          },
+          onStop,
+          autoSendSilenceMs
+        });
+      }
+    },
+
+    speakNobara(text, onEnd, audioUrl = null) {
+      if (!text || !text.trim()) {
         if (onEnd) onEnd();
+        return;
+      }
+
+      this.stopListening(false);
+      this.isNobaraSpeaking = true;
+
+      if (this.currentAudio) {
+        try { this.currentAudio.pause(); } catch (e) {}
+        this.currentAudio = null;
+      }
+
+      const clean = text.replace(/[#*`~_]/g, "").trim();
+      const url = audioUrl || `/api/tts?text=${encodeURIComponent(clean)}&voice=Aoede`;
+      const audio = new Audio(url);
+      audio.playbackRate = 1.08;
+      this.currentAudio = audio;
+
+      const finishHandler = () => {
+        this.currentAudio = null;
+        setTimeout(() => {
+          this.isNobaraSpeaking = false;
+          if (onEnd) onEnd();
+        }, 350);
+      };
+
+      audio.onended = finishHandler;
+      audio.onerror = finishHandler;
+      audio.play().catch(e => {
+        console.warn("Audio autoplay blocked by browser policy:", e);
+        finishHandler();
       });
-    } catch (err) {
-      console.warn("TTS error:", err);
-      isNobaraSpeaking = false;
-      if (onEnd) onEnd();
     }
+  };
+
+  // Backwards-compatible facade functions
+  function speakNobara(text, onEnd, audioUrl = null) {
+    VoiceManager.speakNobara(text, onEnd, audioUrl);
   }
+  let isNobaraSpeaking = false;
+  Object.defineProperty(window, "isNobaraSpeaking", {
+    get: () => VoiceManager.isNobaraSpeaking,
+    set: (v) => { VoiceManager.isNobaraSpeaking = v; }
+  });
 
   // -------------------------------------------------------------------------
   // 2. Synthesized Telephone Ringtone (Web Audio API - 100% Reliable & Mobile-Safe)
@@ -186,94 +383,37 @@ document.addEventListener("DOMContentLoaded", () => {
   // -------------------------------------------------------------------------
   // 4B. Universal Persistent Voice Recognizer (Single-Pass Safe Accumulator)
   // -------------------------------------------------------------------------
-  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 
   function createPersistentRecognizer({
     btn,
     onStart,
     onInterim,
     onFinal,
-    onStop
+    onStop,
+    autoSendSilenceMs = 0
   }) {
-    if (!SpeechRecognition) return null;
-    const rec = new SpeechRecognition();
-    rec.lang = "ar-EG";
-    rec.continuous = true;
-    rec.interimResults = true;
-
-    let isRecording = false;
-    let committedHistory = "";
-    let restartTimer = null;
-
-    rec.onstart = () => {
-      btn?.classList.add("listening", "pulse-red");
-      if (onStart) onStart();
-    };
-
-    rec.onresult = (e) => {
-      // Acoustic Echo Muting: Ignore mic input while phone speaker is playing Nobara's voice
-      if (isNobaraSpeaking) return;
-
-      let currentFinal = "";
-      let currentInterim = "";
-      for (let i = 0; i < e.results.length; ++i) {
-        const item = e.results[i];
-        if (item.isFinal) {
-          currentFinal += item[0].transcript + " ";
-        } else {
-          currentInterim += item[0].transcript;
-        }
-      }
-
-      const rawFull = (committedHistory + " " + currentFinal + " " + currentInterim).trim();
-      const cleanFull = deduplicateSpeech(rawFull);
-      if (onInterim) onInterim(cleanFull, currentInterim, deduplicateSpeech((committedHistory + " " + currentFinal).trim()));
-    };
-
-    rec.onend = () => {
-      if (isRecording) {
-        clearTimeout(restartTimer);
-        restartTimer = setTimeout(() => {
-          if (isRecording && !isNobaraSpeaking) {
-            try { rec.start(); } catch (err) {}
-          }
-        }, 300);
-      } else {
-        btn?.classList.remove("listening", "pulse-red");
-        const full = deduplicateSpeech(committedHistory.trim());
-        if (onFinal) onFinal(full);
-      }
-    };
-
-    rec.onerror = (e) => {
-      console.warn("Recognizer event:", e.error);
-      if (isRecording && (e.error === "no-speech" || e.error === "network")) {
-        clearTimeout(restartTimer);
-        restartTimer = setTimeout(() => {
-          if (isRecording && !isNobaraSpeaking) {
-            try { rec.start(); } catch (err) {}
-          }
-        }, 350);
-      }
-    };
-
-    btn?.addEventListener("click", () => {
-      if (!isRecording) {
-        isRecording = true;
-        committedHistory = "";
-        try { rec.start(); } catch (err) {}
-      } else {
-        isRecording = false;
-        clearTimeout(restartTimer);
-        try { rec.stop(); } catch (err) {}
-        if (onStop) onStop();
-      }
+    if (!btn) return null;
+    const sessionId = "btn_" + (btn.id || Math.random().toString(36).substring(2, 9));
+    btn.addEventListener("click", () => {
+      VoiceManager.toggle({
+        sessionId,
+        btn,
+        onStart,
+        onInterim,
+        onFinal,
+        onStop,
+        autoSendSilenceMs
+      });
     });
 
     return {
-      start: () => { isRecording = true; committedHistory = ""; try { rec.start(); } catch (e) {} },
-      stop: () => { isRecording = false; clearTimeout(restartTimer); try { rec.stop(); } catch (e) {} },
-      isRecording: () => isRecording
+      start: () => VoiceManager.startListening({ sessionId, btn, onStart, onInterim, onFinal, onStop, autoSendSilenceMs }),
+      stop: () => {
+        if (VoiceManager.isListening && VoiceManager.activeSessionId === sessionId) {
+          VoiceManager.stopListening(true);
+        }
+      },
+      isRecording: () => VoiceManager.isListening && VoiceManager.activeSessionId === sessionId
     };
   }
 
@@ -346,160 +486,74 @@ document.addEventListener("DOMContentLoaded", () => {
     triggerProactiveIncomingCall("sleep");
   });
 
-  // Ambient Mic with Persistent Continuous Recognizer
+  // Unified Ambient & Omni Bestie Voice Assistant
   const btnAmbientMic = document.getElementById("btn-ambient-mic");
   createPersistentRecognizer({
     btn: btnAmbientMic,
+    autoSendSilenceMs: 1400,
     onStart: () => {
       btnAmbientMic?.classList.add("speaking");
-      if (ambientStatusText) ambientStatusText.innerText = "🔴 نوبارا سامعاكي يا روحي.. اتكلمي براحتك واضغطي إيقاف لما تخلصي ⏹️";
+      if (ambientStatusText) ambientStatusText.innerText = "🔴 نوبارا سامعاكي يا روحي.. قولي طلبك وهتنفذه فوراً 💖";
     },
     onInterim: (full) => {
       if (assistantBubble) assistantBubble.innerText = "سامعاكي: " + full;
     },
     onFinal: async (full) => {
       btnAmbientMic?.classList.remove("speaking");
-      if (!full) return;
-      if (ambientStatusText) ambientStatusText.innerText = "نوبارا بتفكر وبترد عليكي... 💖";
+      if (!full || full.trim().length < 2) {
+        if (ambientStatusText) ambientStatusText.innerText = "نوبارا شايفة جدولك ومذكراتك وسامعاكي في أي وقت يا حبيبة ✨";
+        return;
+      }
+      if (ambientStatusText) ambientStatusText.innerText = "نوبارا بتنفذ طلبك وبترد عليكي... 💖⚡";
       try {
-        const res = await fetch("/api/bestie/ambient-assist", {
+        const res = await fetch("/api/bestie/omni-listen", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ intent: "chat", user_message: full })
+          body: JSON.stringify({ raw_speech: full })
         });
-        const data = await res.json();
-        showNobaraMessage(data.reply, true, data.audio_url);
+        const d = await res.json();
+
+        // 1. DIARY intent
+        if (d.intent === "diary" && d.diary_entry) {
+          if (diaryTextarea) {
+            const prev = diaryTextarea.value.trim();
+            diaryTextarea.value = (prev ? prev + "\n\n" : "") + d.diary_entry;
+            localStorage.setItem("habiba_secret_diary", diaryTextarea.value);
+          }
+          switchTab("diary-tab");
+        }
+        // 2. TABLE intent
+        else if (d.intent === "table" && d.table_row && d.table_row.length > 0) {
+          if (tableBody) {
+            const tr = document.createElement("tr");
+            let tds = "";
+            for (let idx = 0; idx < tableHeaders.length; idx++) {
+              const val = d.table_row[idx] || "-";
+              tds += `<td contenteditable="true">${val}</td>`;
+            }
+            tds += `<td><button class="btn-del-row" title="حذف">🗑️</button></td>`;
+            tr.innerHTML = tds;
+            tableBody.appendChild(tr);
+            bindTableEvents();
+            saveTableToStorage();
+          }
+          switchTab("table-tab");
+        }
+        // 3. STUDIO intent
+        else if (d.intent === "studio" && d.studio_prompt) {
+          switchTab("studio-tab");
+          generateStudioImage(d.studio_prompt);
+        }
+
+        showNobaraMessage(d.reply, true, d.audio_url);
+        if (ambientStatusText) {
+          ambientStatusText.innerText = "🟢 نوبارا سامعاكي دايماً.. اضغطي وتحدثي في أي وقت ✨";
+        }
       } catch (err) {
         showNobaraMessage("يا روحي أنا معاكي وسامعة كل كلامك الحلو ده! 🌸", true);
       }
     }
   });
-
-  // -------------------------------------------------------------------------
-  // 6B. Hands-Free Omni Listening Mode (Open & Just Talk - Zero Buttons Needed!)
-  // -------------------------------------------------------------------------
-  let isHandsFreeActive = true;
-  let omniRecognizer = null;
-  let omniSilenceTimer = null;
-  let currentSpokenBuffer = "";
-
-  function initHandsFreeOmniMode() {
-    if (!SpeechRecognition) return;
-    try {
-      omniRecognizer = new SpeechRecognition();
-      omniRecognizer.lang = "ar-EG";
-      omniRecognizer.continuous = true;
-      omniRecognizer.interimResults = true;
-
-      omniRecognizer.onresult = (e) => {
-        // Echo cancellation: Don't listen to Nobara's own voice
-        if (isNobaraSpeaking || isCallActive) return;
-
-        let liveText = "";
-        for (let i = 0; i < e.results.length; ++i) {
-          liveText += e.results[i][0].transcript + " ";
-        }
-        liveText = deduplicateSpeech(liveText);
-        if (!liveText || liveText.length < 2) return;
-
-        currentSpokenBuffer = liveText;
-        if (assistantBubble) {
-          assistantBubble.innerText = "سامعاكي: " + currentSpokenBuffer;
-        }
-
-        clearTimeout(omniSilenceTimer);
-        omniSilenceTimer = setTimeout(async () => {
-          if (!currentSpokenBuffer || currentSpokenBuffer.length < 3) return;
-          const phrase = currentSpokenBuffer;
-          currentSpokenBuffer = "";
-
-          if (ambientStatusText) {
-            ambientStatusText.innerText = "نوبارا بتنفذ طلبك وبترد عليكي... 💖⚡";
-          }
-
-          try {
-            const res = await fetch("/api/bestie/omni-listen", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ raw_speech: phrase })
-            });
-            const d = await res.json();
-
-            // 1. If Intent is DIARY -> write into diary and switch to diary tab
-            if (d.intent === "diary" && d.diary_entry) {
-              if (diaryTextarea) {
-                const prev = diaryTextarea.value.trim();
-                diaryTextarea.value = (prev ? prev + "\n\n" : "") + d.diary_entry;
-                localStorage.setItem("habiba_secret_diary", diaryTextarea.value);
-              }
-              switchTab("diary-tab");
-            }
-            // 2. If Intent is TABLE -> add row to table and switch to table tab
-            else if (d.intent === "table" && d.table_row && d.table_row.length > 0) {
-              if (tableBody) {
-                const tr = document.createElement("tr");
-                let tds = "";
-                for (let idx = 0; idx < tableHeaders.length; idx++) {
-                  const val = d.table_row[idx] || "-";
-                  tds += `<td contenteditable="true">${val}</td>`;
-                }
-                tds += `<td><button class="btn-del-row" title="حذف">🗑️</button></td>`;
-                tr.innerHTML = tds;
-                tableBody.appendChild(tr);
-                bindTableEvents();
-                saveTableToStorage();
-              }
-              switchTab("table-tab");
-            }
-            // 3. If Intent is STUDIO -> trigger image generation and switch to studio tab
-            else if (d.intent === "studio" && d.studio_prompt) {
-              switchTab("studio-tab");
-              generateStudioImage(d.studio_prompt);
-            }
-
-            // Speak Nobara's warm Google Aoede reply
-            showNobaraMessage(d.reply, true, d.audio_url);
-            if (ambientStatusText) {
-              ambientStatusText.innerText = "🟢 نوبارا سامعاكي دايماً.. قولي اللي تحبيه في أي وقت ✨";
-            }
-          } catch (e) {
-            showNobaraMessage("يا روحي أنا معاكي وسامعة كل كلامك الحلو ده! 🌸", true);
-          }
-        }, 1300);
-      };
-
-      omniRecognizer.onend = () => {
-        if (isHandsFreeActive && !isNobaraSpeaking && !isCallActive) {
-          setTimeout(() => {
-            try { omniRecognizer.start(); } catch (err) {}
-          }, 350);
-        }
-      };
-
-      omniRecognizer.onerror = (e) => {
-        if (isHandsFreeActive && (e.error === "no-speech" || e.error === "network")) {
-          setTimeout(() => {
-            try { omniRecognizer.start(); } catch (err) {}
-          }, 450);
-        }
-      };
-
-      // Browser policy: start microphone on first tap/interaction anywhere on page
-      const armHandsFree = () => {
-        if (isHandsFreeActive) {
-          try { omniRecognizer.start(); } catch (e) {}
-        }
-        document.removeEventListener("click", armHandsFree);
-        document.removeEventListener("touchstart", armHandsFree);
-      };
-      document.addEventListener("click", armHandsFree, { once: true });
-      document.addEventListener("touchstart", armHandsFree, { once: true });
-    } catch (e) {
-      console.warn("Hands-free init:", e);
-    }
-  }
-
-  initHandsFreeOmniMode();
 
   // -------------------------------------------------------------------------
   // 7. Simulated Phone Call System (Incoming + Active Voice Call)
@@ -659,37 +713,26 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   function startCallSpeechRecognition() {
-    if (!SpeechRecognition || !isCallActive) return;
-    const callRec = new SpeechRecognition();
-    callRec.lang = "ar-EG";
-    callRec.continuous = true;
-    callRec.interimResults = true;
-
-    btnCallMicToggle?.classList.add("speaking");
-
-    callRec.onresult = (e) => {
-      let interim = "";
-      let finalTxt = "";
-      for (let i = e.resultIndex; i < e.results.length; ++i) {
-        if (e.results[i].isFinal) finalTxt += e.results[i][0].transcript + " ";
-        else interim += e.results[i][0].transcript;
+    if (!isCallActive) return;
+    VoiceManager.startListening({
+      sessionId: "active_call_session",
+      btn: btnCallMicToggle,
+      autoSendSilenceMs: 1300,
+      onStart: () => {
+        btnCallMicToggle?.classList.add("speaking");
+      },
+      onInterim: (full) => {
+        if (userCallLiveText) userCallLiveText.innerText = full;
+      },
+      onFinal: (full) => {
+        if (full && full.trim().length > 1) {
+          sendUserCallMessage(full.trim());
+        }
+      },
+      onStop: () => {
+        btnCallMicToggle?.classList.remove("speaking");
       }
-      const full = (finalTxt + " " + interim).trim();
-      if (userCallLiveText) userCallLiveText.innerText = full;
-
-      if (finalTxt.trim().length > 3) {
-        callRec.stop();
-        sendUserCallMessage(finalTxt.trim());
-      }
-    };
-
-    callRec.onend = () => {
-      if (isCallActive && !currentGoogleAudio) {
-        try { callRec.start(); } catch (err) {}
-      }
-    };
-
-    try { callRec.start(); } catch (e) {}
+    });
   }
 
   async function sendUserCallMessage(msg) {

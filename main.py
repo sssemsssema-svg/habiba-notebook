@@ -198,6 +198,10 @@ class ProactiveCheckRequest(BaseModel):
     current_time: Optional[str] = ""
     force_type: Optional[str] = None
 
+class OmniListenRequest(BaseModel):
+    raw_speech: str = Field(..., min_length=1)
+    current_tab: Optional[str] = "diary"
+
 
 # -----------------------------------------------------------------------------
 # LLM Caller with Multi-Key Rotation and Fallback
@@ -404,7 +408,12 @@ async def correct_arabic(req: CorrectArabicRequest):
     except Exception:
         sensei_reply = "يا حبيبة يا روحي سمعتك وسجلت كل اللي قولتيه في دفترك السحري 🌸💖"
         corrected_text = req.raw_text
-    return {"sensei_reply": sensei_reply, "corrected_text": corrected_text}
+    clean_audio = sensei_reply.replace('#', '').replace('*', '').replace('`', '').replace('~', '').replace('_', '').strip()
+    return {
+        "sensei_reply": sensei_reply,
+        "corrected_text": corrected_text,
+        "audio_url": f"/api/tts?text={urllib.parse.quote(clean_audio)}&voice=Aoede"
+    }
 
 @app.post("/api/diary/generate-background")
 async def generate_background(req: GenerateBackgroundRequest):
@@ -449,7 +458,12 @@ async def setup_table_headers(req: SetupTableHeadersRequest):
     except Exception:
         headers = ["المهمة / الدرس 🎯", "الميعاد ⏰", "اليوم 📅", "المكان 📍", "الملاحظات 📝"]
         reply = "عملتلك الجدول بالخانات المطلوبة يا روحي 🌸"
-    return {"headers": headers, "reply": reply}
+    clean_audio = reply.replace('#', '').replace('*', '').replace('`', '').replace('~', '').replace('_', '').strip()
+    return {
+        "headers": headers,
+        "reply": reply,
+        "audio_url": f"/api/tts?text={urllib.parse.quote(clean_audio)}&voice=Aoede"
+    }
 
 @app.post("/api/table/fill-rows")
 async def fill_table_rows(req: FillTableRowsRequest):
@@ -486,7 +500,12 @@ async def fill_table_rows(req: FillTableRowsRequest):
         col_count = len(req.headers) if req.headers else 5
         rows = [[req.raw_speech[:35]] + ["-"] * (col_count - 1)]
         reply = "سجلتلك البيانات في الجدول يا بيبو 🌸"
-    return {"rows": rows, "reply": reply}
+    clean_audio = reply.replace('#', '').replace('*', '').replace('`', '').replace('~', '').replace('_', '').strip()
+    return {
+        "rows": rows,
+        "reply": reply,
+        "audio_url": f"/api/tts?text={urllib.parse.quote(clean_audio)}&voice=Aoede"
+    }
 
 @app.post("/api/table/parse-task")
 async def parse_task(req: ParseTaskRequest):
@@ -633,6 +652,57 @@ async def bestie_ambient_assist(req: AmbientAssistRequest):
     return {
         "reply": reply.strip(),
         "audio_url": f"/api/tts?text={urllib.parse.quote(clean)}&voice=Aoede"
+    }
+
+
+@app.post("/api/bestie/omni-listen")
+async def bestie_omni_listen(req: OmniListenRequest):
+    """Omni-Assistant: Listens hands-free, classifies intent (diary/table/chat/studio), executes action, returns speech."""
+    prompt = f"""أنتِ "نوبارا كوجيساكي" (Nobara 🌸💅)، البيست فريند والمساعدة الذكية للبنوتة "حبيبة" (Habiba - 12 سنة).
+حبيبة اتكلمت بصوتها بدون زراير وقالت:
+"{req.raw_speech}"
+
+المطلوب تصنيف قصد حبيبة واختيار أحد الإجراءات (intent):
+1. "diary": لو كانت بتحكي يومياتها أو مذكراتها أو بتقول اكتبي كذا في مذكراتي أو بتحكي عن يومها أو مدرستها أو النادي.
+2. "table": لو كانت بتطلب إضافة درس، موعد، تمرين، أو جدول (مثل: "عندي درس علوم الساعة 5"، "ضيفي في الجدول تمرين السباحة").
+3. "studio": لو كانت بتطلب رسم صورة أو خلفية أنمي (مثل: "ارسميلي صورة"، "عايزة صورة بنت أنمي").
+4. "chat": لو كانت بتسلم عليكي، بتفضفض، بتهزر، أو بتسأل سؤال عادي (مثل: "ازيك يا نوبارا"، "وحشتيني"، "أعمل إيه").
+
+أخرجي JSON فقط:
+{{
+  "intent": "diary" | "table" | "studio" | "chat",
+  "diary_entry": "نص المذكرات مصاغ بأناقة بالعامية المصرية إن كان القصد diary وإلا فارغ",
+  "table_row": ["المهمة", "الميعاد", "اليوم", "المكان", "الملاحظات"],
+  "studio_prompt": "وصف الصورة بالإنجليزي لو studio وإلا فارغ",
+  "reply": "رد نوبارا بالعامية المصرية الحنونة والمرحة (جملتين كول تناديها يا بيبو أو يا حبيبة)"
+}}
+"""
+    raw = await call_llm(prompt, json_mode=True)
+    try:
+        clean = raw.strip()
+        if "```json" in clean: clean = clean.split("```json")[1].split("```")[0].strip()
+        elif "```" in clean: clean = clean.split("```")[1].split("```")[0].strip()
+        data = json.loads(clean)
+        intent = data.get("intent", "chat")
+        reply = data.get("reply", "يا روحي سامعاكي ومعاكي في كل وقت! 💖🌸")
+        diary_entry = data.get("diary_entry", "")
+        table_row = data.get("table_row", [])
+        studio_prompt = data.get("studio_prompt", "")
+    except Exception:
+        intent = "chat"
+        reply = "يا حبيبة قلبي أنا سامعة كل كلمة بتقوليها ومسجلاها في قلبي! 🌸💖"
+        diary_entry = ""
+        table_row = []
+        studio_prompt = ""
+
+    clean_audio = reply.replace('#', '').replace('*', '').replace('`', '').replace('~', '').replace('_', '').strip()
+    return {
+        "intent": intent,
+        "reply": reply,
+        "diary_entry": diary_entry,
+        "table_row": table_row,
+        "studio_prompt": studio_prompt,
+        "audio_url": f"/api/tts?text={urllib.parse.quote(clean_audio)}&voice=Aoede"
     }
 
 

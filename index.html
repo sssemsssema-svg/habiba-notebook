@@ -1,0 +1,458 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>دفتر يوميات حبيبة السري 🌸✨ | مع صاحبتها نوبارا</title>
+  <!-- Google Fonts: Orbitron for Sci-Fi/Anime feel, Marhey & Cairo for Egyptian Arabic typography -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800;900&family=Marhey:wght@600;700&family=Orbitron:wght@700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/style.css">
+  
+  <!-- PWA & Mobile App Settings -->
+  <link rel="manifest" href="/manifest.json">
+  <link rel="apple-touch-icon" href="/static/icon-192.png">
+  <link rel="icon" type="image/png" href="/static/icon-192.png">
+  <meta name="theme-color" content="#7b2cbf">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="دفتر حبيبة">
+</head>
+<body>
+
+  <!-- Floating Anime Atmosphere Elements (Aura Sparks & Sakura) -->
+  <div class="anime-sparkles" aria-hidden="true">
+    <span class="sparkle s1">⚡</span>
+    <span class="sparkle s2">🌸</span>
+    <span class="sparkle s3">✨</span>
+    <span class="sparkle s4">🕶️</span>
+    <span class="sparkle s5">🧋</span>
+    <span class="sparkle s6">💜</span>
+    <span class="sparkle s7">🔮</span>
+  </div>
+
+  <div class="main-wrapper">
+    
+    <!-- Top Navigation & Anime Header -->
+    <header class="app-header">
+      <div class="header-brand">
+        <div class="brand-badge">JJK • 呪術</div>
+        <h1>دفتر يوميات حبيبة السري 🌸✨</h1>
+        <span class="sub-tag">مع صاحبتها الأنتيم نوبارا 💖</span>
+      </div>
+
+      <div class="header-actions">
+        <!-- Install App on Mobile Screen Button -->
+        <button id="btn-pwa-install" class="btn-pwa-install" title="تثبيت التطبيق كأيقونة على شاشة الموبايل">
+          <span class="pwa-icon">📲</span>
+          <span class="pwa-text">تثبيت التطبيق</span>
+        </button>
+
+        <!-- Call Bestie Nobara Button -->
+        <button id="btn-header-call" class="btn-nobara-call pulse-call" title="اتصلي بصاحبتك الأنتيم نوبارا">
+          <span class="call-icon">📞</span>
+          <span class="call-text">مكالمة مع نوبارا</span>
+        </button>
+
+        <!-- Bookmark Tabs (Ribbons) -->
+        <nav class="bookmark-tabs">
+          <button class="tab-ribbon active" data-tab="diary-tab">
+            <span class="tab-icon">📖</span>
+            <span class="tab-label">يومياتي وأسراري</span>
+          </button>
+          <button class="tab-ribbon" data-tab="table-tab">
+            <span class="tab-icon">⚡</span>
+            <span class="tab-label">جدول المهمات</span>
+          </button>
+          <button class="tab-ribbon" data-tab="studio-tab">
+            <span class="tab-icon">🎨</span>
+            <span class="tab-label">ستوديو الأنمي</span>
+          </button>
+        </nav>
+      </div>
+    </header>
+
+    <!-- 3D Realistic Physical Notebook Container -->
+    <div class="notebook-3d-scene">
+      <div class="notebook-cover">
+        
+        <!-- Notebook Spine & Metal Spiral Rings -->
+        <div class="spiral-binding">
+          <div class="spiral-loop"><span class="ring-metal"></span></div>
+          <div class="spiral-loop"><span class="ring-metal"></span></div>
+          <div class="spiral-loop"><span class="ring-metal"></span></div>
+          <div class="spiral-loop"><span class="ring-metal"></span></div>
+          <div class="spiral-loop"><span class="ring-metal"></span></div>
+          <div class="spiral-loop"><span class="ring-metal"></span></div>
+          <div class="spiral-loop"><span class="ring-metal"></span></div>
+          <div class="spiral-loop"><span class="ring-metal"></span></div>
+          <div class="spiral-loop"><span class="ring-metal"></span></div>
+          <div class="spiral-loop"><span class="ring-metal"></span></div>
+        </div>
+
+        <!-- Notebook Real Paper Page -->
+        <div class="notebook-inner-page">
+          
+          <!-- Cute Anime Margin Stickers -->
+          <div class="page-sticker sticker-tr" title="Gojo Shades">🕶️</div>
+          <div class="page-sticker sticker-bl" title="Sakura Petal">🌸</div>
+          <div class="page-sticker sticker-br" title="Cursed Spark">⚡</div>
+          <div class="page-sticker sticker-tl" title="Boba Tea">🧋</div>
+
+          <!-- Top Toolbar on the Paper -->
+          <div class="paper-topbar">
+            <div class="date-chip">
+              <span class="icon">📅</span>
+              <span id="current-date">الجمعة، ٧ نوفمبر</span>
+              <span class="kanji-seal">特級</span>
+            </div>
+
+            <div class="mood-bar">
+              <span class="mood-title">المود:</span>
+              <button class="mood-chip active" data-mood="super" title="طاقتي 100%">⚡ خارقة</button>
+              <button class="mood-chip" data-mood="happy" title="رايقة">🌸 رايقة</button>
+              <button class="mood-chip" data-mood="gaming" title="جيمينج">🎮 جيمينج</button>
+              <button class="mood-chip" data-mood="chill" title="استكنان">🧋 بوبا</button>
+            </div>
+          </div>
+
+          <!-- Nobara Ambient Background Companion (شغالة مع حبيبة في الخلفية) -->
+          <div class="ambient-companion-box">
+            <div class="ambient-header">
+              <div class="ambient-avatar-wrap">
+                <span class="ambient-avatar">🌸</span>
+                <span class="ambient-wave"></span>
+              </div>
+              <div class="ambient-title-wrap">
+                <div class="ambient-name-row">
+                  <strong>نوبارا صاحبتك الأنتيم 🌸💅</strong>
+                  <span class="ambient-tag">شغالة معاكي في الخلفية 💖</span>
+                </div>
+                <span id="ambient-status-text" class="ambient-status">نوبارا شايفة جدولك ومذكراتك وسامعاكي في أي وقت يا حبيبة ✨</span>
+              </div>
+              <button id="btn-toggle-ambient" class="btn-ambient-toggle active" title="تشغيل/إيقاف نوبارا في الخلفية">
+                <span class="ambient-dot"></span>
+                <span id="ambient-toggle-label">نوبارا شغالة 🟢</span>
+              </button>
+            </div>
+
+            <!-- Speech bubble where Nobara talks directly to Habiba without blocking notebook -->
+            <div class="ambient-bubble-container">
+              <div class="nobara-bubble-chat">
+                <span id="assistant-bubble">أهلاً يا حبيبة قلبي! أنا نوبارا صاحبتك.. احكيلي يومك كان عامل إزاي أو اسأليني عن جدولك، أنا جنبك وسامعاكي دايماً ومستحيل أسيبك لوحدك! 💖🌸</span>
+              </div>
+            </div>
+
+            <!-- Quick Care Action Chips for Habiba -->
+            <div class="ambient-care-chips">
+              <button class="care-chip" data-intent="remind_tasks">⏰ فكريني بمواعيدي يا نوبارا</button>
+              <button class="care-chip" data-intent="health_check">💧 فكريني بالمية والأكل</button>
+              <button class="care-chip" data-intent="sleep_check">🌙 أنام ولا لسة؟</button>
+              <button class="care-chip" data-intent="chat">💖 فضفضي معايا</button>
+              <button id="btn-ambient-mic" class="care-chip chip-mic" title="تحدثي بالصوت مع نوبارا">🎙️ تحدثي مع نوبارا</button>
+              <button id="btn-card-call" class="care-chip chip-call" title="رنة مكالمة فون">📞 مكالمة فون ورينجتون</button>
+            </div>
+          </div>
+
+          <!-- =============================================================
+               TAB 1: SMART DIARY (يومياتي ومذكراتي السرية)
+               ============================================================= -->
+          <section id="diary-tab" class="tab-content active">
+            
+            <!-- Controls Bar: Background & Actions -->
+            <div class="diary-actions-bar">
+              <button id="btn-toggle-bg-drawer" class="btn-anime-subtle">
+                🎨 غيّري الخلفية بالذكاء الاصطناعي
+              </button>
+              <div class="btn-group">
+                <button id="btn-save-diary" class="btn-anime-primary" title="حفظ في الدفتر">
+                  💾 حفظ مذكراتي
+                </button>
+                <button id="btn-clear-diary" class="btn-anime-danger" title="صفحة جديدة">
+                  🧹 مسح
+                </button>
+              </div>
+            </div>
+
+            <!-- Background Preset Drawer (Collapsible) -->
+            <div id="bg-drawer" class="bg-drawer hidden">
+              <div class="drawer-header">
+                <span>اختر مشهد أنمي أو اكتبي اللي في خيالك:</span>
+                <button id="btn-close-drawer" class="close-x">&times;</button>
+              </div>
+              <div class="preset-chips">
+                <button class="preset-chip" data-prompt="مدينة شيبويا في الليل وأضواء النيون البنفسجية">🏙️ شيبويا نيون</button>
+                <button class="preset-chip" data-prompt="سماء زرقاء وسحاب أنمي مع أزهار الساكورا الوردية">🌸 سماء الساكورا</button>
+                <button class="preset-chip" data-prompt="غرفة أنمي مريحة فيها قطة وموسيقى لوفي ومطر برة">☕ غرفة لوفي</button>
+                <button class="preset-chip" data-prompt="هالة طاقة بنفسجية سحرية مستوحاة من جوجوتسو كايسن">⚡ هالة جوجوتسو</button>
+              </div>
+              <div class="custom-bg-input">
+                <input type="text" id="bg-scene-input" placeholder="مثلاً: قصر جليدي سحري مع نجوم وفراشات أنمي...">
+                <button id="btn-bg-mic" class="mic-small-btn" title="تحدثي بالصوت">🎤</button>
+                <button id="btn-generate-bg" class="btn-anime-subtle">تطبيق 🪄</button>
+              </div>
+            </div>
+
+            <!-- Live Speech Streaming Pill (Words appear live as spoken) -->
+            <div id="diary-live-stream-bar" class="live-stream-bar hidden">
+              <span class="live-indicator-dot"></span>
+              <span class="live-label">سامعك لايف:</span>
+              <span id="diary-live-words" class="live-words">...</span>
+            </div>
+
+            <!-- The Ruled Diary Sheet -->
+            <div class="ruled-diary-container">
+              <!-- Background Image Overlay with 30% Opacity -->
+              <div id="diary-bg-overlay" class="diary-bg-overlay"></div>
+              
+              <!-- Red Left Margin Line (Standard Notebook feel) -->
+              <div class="red-margin-line"></div>
+
+              <!-- Main Textarea for Journaling -->
+              <textarea id="diary-textarea" class="notebook-textarea" placeholder="اكتبي مذكراتك وأفكارك هنا... أو اضغطي على زر المايك تحت واحكي براحتك وسينسي جوجو هيرتبها بالمصري ⚡" spellcheck="false"></textarea>
+            </div>
+
+            <!-- Bottom Voice Dictation Floating Dock -->
+            <div class="voice-dock">
+              <div class="voice-aura-wrapper">
+                <button id="btn-diary-mic" class="mic-master-btn" title="سجلي بالصوت">
+                  <span class="mic-icon">🎙️</span>
+                  <span class="sound-wave"></span>
+                </button>
+              </div>
+              <div class="voice-status-info">
+                <span id="diary-voice-status" class="voice-status-text">اضغطي المايك واحكي.. أنا جاهز أسمعك! ⚡</span>
+                <span class="voice-subtext">الذكاء الاصطناعي هيحول كلامك لعامية مصرية رقيقة ومضبوطة</span>
+              </div>
+            </div>
+
+          </section>
+
+
+          <!-- =============================================================
+               TAB 2: SMART VOICE TABLE (جدول المهمات والمواعيد الخارق)
+               ============================================================= -->
+          <section id="table-tab" class="tab-content">
+            
+            <!-- Table Hero & Master Voice Controller -->
+            <div class="table-voice-box">
+              <div class="box-text">
+                <h3>⚡ المايكروفون الذكي لجدول المهمات</h3>
+                <p>قولي جملة عادية زي: <em>«عايزة أروح النادي الجمعة الساعة 5 تمرين جمباز وشنطة التمرين في الملاحظات»</em>.. والذكاء الاصطناعي هيفرّغها في الأعمدة الـ 7 فوراً!</p>
+              </div>
+
+              <div class="table-mic-action">
+                <button id="btn-table-master-mic" class="mic-master-btn pulse-glow" title="تحدثي بمهمة جديدة">
+                  <span class="mic-icon">🎙️</span>
+                  <span class="sound-wave"></span>
+                </button>
+                <span id="table-voice-status" class="table-status-label">جاهز للاستماع لمهمتك..</span>
+              </div>
+            </div>
+
+            <!-- Table Live Streaming Pill -->
+            <div id="table-live-stream-bar" class="live-stream-bar hidden">
+              <span class="live-indicator-dot"></span>
+              <span class="live-label">سامع مهمتك:</span>
+              <span id="table-live-words" class="live-words">...</span>
+            </div>
+
+            <!-- Table Actions (Add manual row & clear) -->
+            <div class="table-controls-bar">
+              <button id="btn-add-manual-row" class="btn-anime-primary">
+                ➕ إضافة مهمة جديدة يدوياً
+              </button>
+              <button id="btn-clear-table" class="btn-anime-danger">
+                🧹 مسح الجدول
+              </button>
+            </div>
+
+            <!-- Responsive 7-Column Notebook Table -->
+            <div class="table-scroll-container">
+              <table class="anime-notebook-table" id="missions-table">
+                <thead>
+                  <tr>
+                    <th>المهمة / النشاط 🎯</th>
+                    <th>الميعاد ⏰</th>
+                    <th>التاريخ 📅</th>
+                    <th>المكان 📍</th>
+                    <th>الأدوات 🎒</th>
+                    <th>ملاحظات 📝</th>
+                    <th>الحالة ⚡</th>
+                    <th class="col-actions">حذف</th>
+                  </tr>
+                </thead>
+                <tbody id="table-body">
+                  <!-- Dynamically populated or loaded from LocalStorage -->
+                  <tr>
+                    <td contenteditable="true">تمرين السباحة والجمباز</td>
+                    <td contenteditable="true">5:00 مساءً</td>
+                    <td contenteditable="true">الجمعة</td>
+                    <td contenteditable="true">النادي الأهلي</td>
+                    <td contenteditable="true">نظارة ومايوه وفوطة</td>
+                    <td contenteditable="true">متأخرش عن كابتن هاني</td>
+                    <td>
+                      <select class="status-select">
+                        <option value="pending" selected>⚡ قيد التنفيذ</option>
+                        <option value="done">✨ تمت بنجاح</option>
+                        <option value="delayed">⏳ مؤجلة</option>
+                      </select>
+                    </td>
+                    <td><button class="btn-del-row" title="حذف">🗑️</button></td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+          </section>
+
+
+          <!-- =============================================================
+               TAB 3: MAGIC ANIME STUDIO (ستوديو الصور السحري)
+               ============================================================= -->
+          <section id="studio-tab" class="tab-content">
+            
+            <div class="studio-header">
+              <h3>🎨 استوديو توليد صور الأنمي وجوجوتسو كايسن</h3>
+              <p>تخيلي أي شخصية أنمي تحبيها أو شخصيتك الخارقة.. واكتبيها أو انطقيها بالصوت لتظهر كارت بولارويد فوري!</p>
+            </div>
+
+            <!-- Prompt Input with Voice Mic -->
+            <div class="studio-input-card">
+              <div class="studio-input-row">
+                <input type="text" id="studio-prompt-input" placeholder="وصفي صورتك هنا.. مثلاً: شخصية أنمي بعيون زرقاء وقوى خارقة تشبه جوجو...">
+                <button id="btn-studio-mic" class="mic-small-btn" title="تحدثي بالصوت">🎤</button>
+                <button id="btn-generate-image" class="btn-anime-primary">
+                  <span>توليد الصورة 🪄</span>
+                </button>
+              </div>
+
+              <!-- Anime Style Presets for 12yo Girl -->
+              <div class="studio-presets">
+                <span class="presets-label">أفكار خارقة سريعة:</span>
+                <button class="studio-chip" data-prompt="شخصية أنمي جوجوتسو كايسن كول بعيون زرقاء لامعة وشعر بنفسجي">⚡ مقاتلة جوجوتسو</button>
+                <button class="studio-chip" data-prompt="جوجو ساتورو تشيبي كيوت لابس نضارة شمس وبيضحك">🕶️ جوجو تشيبي</button>
+                <button class="studio-chip" data-prompt="قطة نينجا كيوت بتاكل رامن ياباني في شوارع طوكيو">🐱 نينجا رامن</button>
+                <button class="studio-chip" data-prompt="بنت أنمي كول ماسكة بوبا تي ومعاها لابتوب وجيمينج">🧋 بوبا & جيمينج</button>
+              </div>
+
+              <div id="studio-loader" class="studio-loader hidden">
+                <div class="energy-spinner"></div>
+                <span>الذكاء الاصطناعي بيجهّز ضربة الأنمي ويرسم الصورة... ⚡</span>
+              </div>
+            </div>
+
+            <!-- Polaroid Gallery Grid -->
+            <div class="polaroid-gallery" id="polaroid-gallery">
+              <!-- Default Initial Cool Anime Polaroids -->
+              <div class="polaroid-card">
+                <div class="washi-tape washi-purple"></div>
+                <div class="polaroid-frame">
+                  <img src="https://image.pollinations.ai/prompt/cute%20chibi%20gojo%20satoru%20anime%20style%20with%20sunglasses%20and%20cyan%20blue%20eyes%2C%20sparkling%20magic%2C%203d%20aesthetic%2C%20vibrant%20colors?width=600&height=750&nologo=true&seed=9912" alt="جوجو تشيبي" loading="lazy">
+                </div>
+                <div class="polaroid-caption">
+                  <span class="caption-text">السينسي جوجو: الأقوى دائماً! 🕶️⚡</span>
+                  <span class="caption-date">خاص لدفتر البطلة</span>
+                </div>
+              </div>
+
+              <div class="polaroid-card">
+                <div class="washi-tape washi-blue"></div>
+                <div class="polaroid-frame">
+                  <img src="https://image.pollinations.ai/prompt/cute%20kawaii%20anime%20girl%20with%20lavender%20hair%2C%20holding%20boba%20tea%2C%20tokyo%20neon%20aesthetic%2C%20makoto%20shinkai%20style?width=600&height=750&nologo=true&seed=4432" alt="بنت أنمي والبوبا" loading="lazy">
+                </div>
+                <div class="polaroid-caption">
+                  <span class="caption-text">يوم البوبا تي والروقان في طوكيو 🧋🌸</span>
+                  <span class="caption-date">ذكرياتي السحرية</span>
+                </div>
+              </div>
+            </div>
+
+          </section>
+
+        </div> <!-- /notebook-inner-page -->
+
+        <!-- Realistic Page Stack Edge Effect (Right/Bottom) -->
+        <div class="page-thickness-shadow"></div>
+      </div> <!-- /notebook-cover -->
+    </div> <!-- /notebook-3d-scene -->
+
+  </div> <!-- /main-wrapper -->
+
+  <!-- =========================================================================
+       SIMULATED PHONE CALL SYSTEM (مكالمة نوبارا الصوتية ورينجتون الفون)
+       ========================================================================= -->
+  
+  <!-- 1. Incoming Call Screen Modal (رنة الفون) -->
+  <div id="incoming-call-modal" class="call-modal hidden">
+    <div class="call-backdrop"></div>
+    <div class="incoming-call-card">
+      <div class="call-avatar-wrapper">
+        <div class="call-avatar-ring pulse-ring-1"></div>
+        <div class="call-avatar-ring pulse-ring-2"></div>
+        <div class="call-avatar-img">🌸</div>
+      </div>
+      <div class="caller-info">
+        <h2 class="caller-name">نوبارا كوجيساكي 🌸💅</h2>
+        <span class="caller-subtitle">صاحبتك الأنتيم بترن عليكي فون... 💖</span>
+        <span class="caller-badge">Anime Bestie • JJK</span>
+      </div>
+      <div class="call-action-buttons">
+        <button id="btn-accept-call" class="btn-call-circle accept" title="ردي على المكالمة">
+          <span class="btn-icon">📞</span>
+          <span class="btn-label">رد</span>
+        </button>
+        <button id="btn-decline-call" class="btn-call-circle decline" title="إغلاق">
+          <span class="btn-icon">❌</span>
+          <span class="btn-label">إغلاق</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 2. Active Voice Call Screen Modal (المكالمة شغالة) -->
+  <div id="active-call-modal" class="call-modal hidden">
+    <div class="call-backdrop"></div>
+    <div class="active-call-card">
+      <div class="call-top-bar">
+        <span class="live-call-dot"></span>
+        <span id="call-timer" class="call-duration">00:00</span>
+        <span class="call-secure-tag">مكالمة صوتية خاصة 💖</span>
+      </div>
+
+      <div class="active-caller-hero">
+        <div class="active-avatar-glow">
+          <span class="avatar-emoji">🌸</span>
+        </div>
+        <h3>نوبارا كوجيساكي</h3>
+        <p id="nobara-call-status" class="call-status-note">نوبارا سامعاكي وبترد عليكي لايف...</p>
+      </div>
+
+      <!-- Live Voice Dialogue Bubbles -->
+      <div class="call-dialogue-box">
+        <div id="nobara-speech-bubble" class="call-bubble nobara-bubble">
+          <strong>نوبارا:</strong>
+          <span id="nobara-live-reply">ألوو يا روحي! وحشتيني أوي.. سامعاكي ومستنياكي تحكيلي كل حاجة! 💖</span>
+        </div>
+        <div id="user-speech-bubble" class="call-bubble user-bubble">
+          <strong>أنتِ:</strong>
+          <span id="user-call-live-text">تحدثي، كلامك بيظهر هنا لايف...</span>
+        </div>
+      </div>
+
+      <!-- Call Controls -->
+      <div class="active-call-controls">
+        <button id="btn-call-mic-toggle" class="call-control-btn mic-on" title="كتم/تشغيل المايك">
+          🎙️
+        </button>
+        <button id="btn-end-call" class="call-control-btn end-call" title="إنهاء المكالمة">
+          🔴 إنهاء
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

@@ -276,7 +276,10 @@ async def serve_index():
     index_file = BASE_DIR / "index.html"
     if not index_file.exists():
         raise HTTPException(status_code=404, detail="index.html not found")
-    return FileResponse(index_file)
+    return FileResponse(
+        index_file,
+        headers={"Cache-Control": "no-cache, no-store, must-revalidate", "Pragma": "no-cache", "Expires": "0"}
+    )
 
 @app.get("/manifest.json")
 async def serve_manifest():
@@ -286,7 +289,11 @@ async def serve_manifest():
 @app.get("/sw.js")
 async def serve_sw():
     sw = BASE_DIR / "sw.js"
-    return FileResponse(sw, media_type="application/javascript")
+    return FileResponse(
+        sw,
+        media_type="application/javascript",
+        headers={"Cache-Control": "no-cache, no-store, must-revalidate", "Pragma": "no-cache", "Expires": "0"}
+    )
 
 PIPELINE_MD_PATH = Path("C:/Users/Asmaa/.gemini/antigravity/scratch/zero_touch_pipeline/output/pipeline_self_test/merged_assembled.md")
 LOCAL_MD_PATH = BASE_DIR / "merged_assembled.md"

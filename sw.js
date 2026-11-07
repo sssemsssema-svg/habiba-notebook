@@ -1,45 +1,21 @@
-const CACHE_NAME = "habiba-notebook-v1";
-const ASSETS_TO_CACHE = [
-  "/",
-  "/static/style.css",
-  "/static/app.js",
-  "/static/icon-192.png",
-  "/static/icon-512.png",
-  "/static/manifest.json"
-];
+const CACHE_NAME = "habiba-notebook-v3-fresh";
 
 self.addEventListener("install", (event) => {
-  event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => {
-      return cache.addAll(ASSETS_TO_CACHE);
-    })
-  );
   self.skipWaiting();
 });
 
 self.addEventListener("activate", (event) => {
   event.waitUntil(
     caches.keys().then((keys) => {
-      return Promise.all(
-        keys.map((key) => {
-          if (key !== CACHE_NAME) {
-            return caches.delete(key);
-          }
-        })
-      );
+      return Promise.all(keys.map((key) => caches.delete(key)));
     })
   );
   self.clients.claim();
 });
 
 self.addEventListener("fetch", (event) => {
-  // Let API requests go directly to network
-  if (event.request.url.includes("/api/")) {
-    return;
-  }
+  // Always fetch fresh from network
   event.respondWith(
-    caches.match(event.request).then((cachedResponse) => {
-      return cachedResponse || fetch(event.request);
-    })
+    fetch(event.request).catch(() => caches.match(event.request))
   );
 });

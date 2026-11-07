@@ -8,16 +8,34 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800;900&family=Marhey:wght@600;700&family=Orbitron:wght@700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/static/style.css">
+  <link rel="stylesheet" href="/static/style.css?v=20261107_aoede">
   
   <!-- PWA & Mobile App Settings -->
-  <link rel="manifest" href="/manifest.json">
+  <link rel="manifest" href="/manifest.json?v=20261107_aoede">
   <link rel="apple-touch-icon" href="/static/icon-192.png">
   <link rel="icon" type="image/png" href="/static/icon-192.png">
   <meta name="theme-color" content="#7b2cbf">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="دفتر حبيبة">
+
+  <script>
+    // Automatically purge old PWA cache so the fresh Google Studio voice is loaded immediately
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.getRegistrations().then(function(regs) {
+        for (let r of regs) { r.update(); }
+      });
+    }
+    if ('caches' in window) {
+      caches.keys().then(function(names) {
+        for (let name of names) {
+          if (name.includes('v1') || name.includes('v2')) {
+            caches.delete(name);
+          }
+        }
+      });
+    }
+  </script>
 </head>
 <body>
 
@@ -39,7 +57,7 @@
       <div class="header-brand">
         <div class="brand-badge">JJK • 呪術</div>
         <h1>دفتر يوميات حبيبة السري 🌸✨</h1>
-        <span class="sub-tag">مع صاحبتها الأنتيم نوبارا 💖</span>
+        <span class="sub-tag">مع صاحبتها الأنتيم نوبارا 💖 • <strong style="color: #ffe66d;">صوت جوجل Aoede الجديد ✨</strong></span>
       </div>
 
       <div class="header-actions">
@@ -519,6 +537,6 @@
     </button>
   </nav>
 
-  <script src="/static/app.js"></script>
+  <script src="/static/app.js?v=20261107_aoede"></script>
 </body>
 </html>

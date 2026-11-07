@@ -26,15 +26,9 @@ document.addEventListener("DOMContentLoaded", () => {
         currentGoogleAudio.onerror = () => { currentGoogleAudio = null; onEnd(); };
       }
       currentGoogleAudio.play().catch(e => {
-        console.warn("Audio autoplay catch, falling back to speech synthesis if needed:", e);
-        if ('speechSynthesis' in window) {
-          const u = new SpeechSynthesisUtterance(clean);
-          u.lang = 'ar-EG';
-          if (onEnd) u.onend = onEnd;
-          window.speechSynthesis.speak(u);
-        } else if (onEnd) {
-          onEnd();
-        }
+        console.warn("Audio autoplay blocked by browser policy:", e);
+        // STRICT DIRECTIVE: NEVER fall back to robotic OS speech synthesis
+        if (onEnd) onEnd();
       });
     } catch (err) {
       console.warn("TTS error:", err);
@@ -326,6 +320,22 @@ document.addEventListener("DOMContentLoaded", () => {
   let callStartTime = 0;
   let callTimerInterval = null;
   let activeCallProactiveMessage = "";
+  let preloadedCallAudio = null;
+  let preloadedCallText = "";
+
+  function prepareCallAudio(text, audioUrl = null) {
+    if (!text) return;
+    preloadedCallText = text;
+    const clean = text.replace(/[#*`~_]/g, "").trim();
+    const url = audioUrl || `/api/tts?text=${encodeURIComponent(clean)}&voice=Aoede`;
+    try {
+      preloadedCallAudio = new Audio(url);
+      preloadedCallAudio.preload = "auto";
+      preloadedCallAudio.load();
+    } catch (e) {
+      console.warn("Failed to preload audio:", e);
+    }
+  }
 
   async function triggerProactiveIncomingCall(forceType = null) {
     try {
@@ -338,6 +348,8 @@ document.addEventListener("DOMContentLoaded", () => {
       if (data.should_call) {
         activeCallProactiveMessage = data.message;
         if (callerSubtitle) callerSubtitle.innerText = data.message.slice(0, 40) + "... 💖";
+        // Pre-warm audio instantly while phone rings so answer is 0ms delay!
+        prepareCallAudio(data.message, data.audio_url);
         incomingCallModal?.classList.remove("hidden");
         playRingtone();
       }
@@ -357,6 +369,19 @@ document.addEventListener("DOMContentLoaded", () => {
     activeCallProactiveMessage = "";
     incomingCallModal?.classList.remove("hidden");
     playRingtone();
+
+    // Fetch and preload opener IMMEDIATELY while ringing!
+    fetch("/api/bestie/call-opener", { method: "POST" })
+      .then(r => r.json())
+      .then(d => {
+        if (d.opener) {
+          prepareCallAudio(d.opener, d.audio_url);
+        }
+      })
+      .catch(() => {
+        const fallbackText = "ألوو يا حبيبة يا قلبي! سامعاكي يا روحي احكيلي كل حاجة 💖";
+        prepareCallAudio(fallbackText);
+      });
   }
 
   btnHeaderCall?.addEventListener("click", startIncomingCallRing);
@@ -365,6 +390,7 @@ document.addEventListener("DOMContentLoaded", () => {
   btnDeclineCall?.addEventListener("click", () => {
     stopRingtone();
     incomingCallModal?.classList.add("hidden");
+    preloadedCallAudio = null;
   });
 
   btnAcceptCall?.addEventListener("click", () => {
@@ -383,27 +409,33 @@ document.addEventListener("DOMContentLoaded", () => {
     callStartTime = Date.now();
     callTimerInterval = setInterval(updateCallTimer, 1000);
 
-    if (activeCallProactiveMessage) {
-      if (nobaraLiveReply) nobaraLiveReply.innerText = activeCallProactiveMessage;
-      speakNobara(activeCallProactiveMessage, () => {
+    const callGreeting = activeCallProactiveMessage || preloadedCallText || "ألوو يا حبيبة يا قلبي! سامعاكي يا روحي احكيلي كل حاجة 💖";
+    if (nobaraLiveReply) nobaraLiveReply.innerText = callGreeting;
+
+    // INSTANT PLAYBACK: If audio was pre-buffered during ringing, play it immediately inside click gesture!
+    if (preloadedCallAudio) {
+      if (currentGoogleAudio) {
+        currentGoogleAudio.pause();
+        currentGoogleAudio = null;
+      }
+      currentGoogleAudio = preloadedCallAudio;
+      preloadedCallAudio = null;
+      currentGoogleAudio.onended = () => {
+        currentGoogleAudio = null;
+        if (isCallActive) startCallSpeechRecognition();
+      };
+      currentGoogleAudio.onerror = () => {
+        currentGoogleAudio = null;
+        if (isCallActive) startCallSpeechRecognition();
+      };
+      currentGoogleAudio.play().catch(e => {
+        console.warn("Direct preloaded audio play catch:", e);
         if (isCallActive) startCallSpeechRecognition();
       });
     } else {
-      fetch("/api/bestie/call-opener", { method: "POST" })
-        .then(r => r.json())
-        .then(d => {
-          const op = d.opener || "ألوو يا بيبو يا قمر! وحشتيني أوي.. سامعاكي ومستنياكي تحكيلي كل حاجة! 💖";
-          if (nobaraLiveReply) nobaraLiveReply.innerText = op;
-          speakNobara(op, () => {
-            if (isCallActive) startCallSpeechRecognition();
-          });
-        })
-        .catch(() => {
-          if (nobaraLiveReply) nobaraLiveReply.innerText = "ألوو يا حبيبة يا قلبي! سامعاكي يا روحي احكيلي كل حاجة 💖";
-          speakNobara("ألوو يا حبيبة يا قلبي! سامعاكي يا روحي احكيلي كل حاجة", () => {
-            if (isCallActive) startCallSpeechRecognition();
-          });
-        });
+      speakNobara(callGreeting, () => {
+        if (isCallActive) startCallSpeechRecognition();
+      });
     }
   }
 

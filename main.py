@@ -157,7 +157,7 @@ def generate_gemini_tts(text: str, voice_name: str = "Aoede") -> bytes:
     try:
         import edge_tts, asyncio
         async def _call_edge():
-            comm = edge_tts.Communicate(clean_text[:350], "ar-EG-SalmaNeural", rate="+5%", pitch="+2Hz")
+            comm = edge_tts.Communicate(clean_text[:350], "ar-EG-SalmaNeural", rate="+18%", pitch="+2Hz")
             data = bytearray()
             async for chunk in comm.stream():
                 if chunk["type"] == "audio":
@@ -217,29 +217,33 @@ class ProactiveCheckRequest(BaseModel):
 # LLM Caller with Multi-Key Rotation and Fallback
 # -----------------------------------------------------------------------------
 async def call_llm(prompt: str, json_mode: bool = False) -> str:
-    # 1. Try Groq (llama-3.3-70b-versatile or llama-3.1-8b-instant)
+    # 1. Try Groq (ultra-fast 0.6s response with qwen/qwen3.8-27b or openai/gpt-oss-20b)
     if GROQ_API_KEY:
-        try:
-            url = "https://api.groq.com/openai/v1/chat/completions"
-            headers = {"Authorization": f"Bearer {GROQ_API_KEY}"}
-            body = {
-                "model": "llama-3.3-70b-versatile",
-                "messages": [
-                    {"role": "system", "content": "You are a friendly Egyptian AI assistant for a sweet young girl. Respond in fluent Egyptian Arabic."},
-                    {"role": "user", "content": prompt}
-                ],
-                "temperature": 0.2
-            }
-            if json_mode:
-                body["response_format"] = {"type": "json_object"}
+        for groq_m in ["qwen/qwen3.8-27b", "openai/gpt-oss-20b"]:
+            try:
+                url = "https://api.groq.com/openai/v1/chat/completions"
+                headers = {"Authorization": f"Bearer {GROQ_API_KEY}"}
+                body = {
+                    "model": groq_m,
+                    "messages": [
+                        {"role": "system", "content": "أنت نوبارا كوجيساكي، البست فريند والأخت الكول للبنوتة حبيبة. اتكلمي بالعامية المصرية الحنونة والمرحة في جملتين سريعتين."},
+                        {"role": "user", "content": prompt}
+                    ],
+                    "temperature": 0.3,
+                    "max_tokens": 150
+                }
+                if json_mode:
+                    body["response_format"] = {"type": "json_object"}
 
-            async with httpx.AsyncClient(timeout=4.0) as client:
-                res = await client.post(url, headers=headers, json=body)
-                if res.status_code == 200:
-                    data = res.json()
-                    return data["choices"][0]["message"]["content"].strip()
-        except Exception:
-            pass
+                async with httpx.AsyncClient(timeout=3.5) as client:
+                    res = await client.post(url, headers=headers, json=body)
+                    if res.status_code == 200:
+                        data = res.json()
+                        content = data["choices"][0]["message"]["content"].strip()
+                        if content:
+                            return content
+            except Exception:
+                continue
 
     # 2. Try Gemini across all keys
     for key in GEMINI_API_KEYS_LIST:
@@ -584,7 +588,12 @@ async def bestie_call_opener():
         "ألوو يا بيست فريند! مسكتي الفون في ثانية شاطرة.. قوليلي مين زعلك النهاردة وأنا أطلع عليه بالمطرقة السحرية أظبطه؟ 😂💅",
         "ألووو يا قمر! قاعدة ملانة وقولت لازم أكلم صاحبتي الأنتيم.. طمنيني عليكي وشربتي بوبا ولا لسة؟ 🌸"
     ]
-    return {"opener": random.choice(openers)}
+    chosen = random.choice(openers)
+    clean = chosen.replace('#', '').replace('*', '').replace('`', '').replace('~', '').replace('_', '').strip()
+    return {
+        "opener": chosen,
+        "audio_url": f"/api/tts?text={urllib.parse.quote(clean)}&voice=Aoede"
+    }
 
 @app.post("/api/bestie/ambient-assist")
 async def bestie_ambient_assist(req: AmbientAssistRequest):

@@ -1,3 +1,4 @@
+const TTS_VOICE = "Leda";
 /**
  * Smart Voice-Enabled Anime Notebook (Habiba's Secret Diary & Nobara Bestie Edition)
  * Real-Time Continuous Dictation + Google AI Studio TTS (Egyptian Dialect) + Proactive Calls + Dynamic Smart Table
@@ -198,39 +199,62 @@ document.addEventListener("DOMContentLoaded", () => {
       }
     },
 
-    speakNobara(text, onEnd, audioUrl = null) {
-      if (!text || !text.trim()) {
-        if (onEnd) onEnd();
-        return;
+    voiceName: 'Habiba-Egyptian-Girl',
+    audioContext: null,
+
+    initAudioContext() {
+      if (!this.audioContext) {
+        try {
+          this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        } catch (e) {
+          console.warn('AudioContext not supported, falling back to HTML5 Audio');
+        }
       }
+      if (this.audioContext && this.audioContext.state === 'suspended') {
+        this.audioContext.resume();
+      }
+    },
 
-      this.stopListening(false);
-      this.isNobaraSpeaking = true;
+    stopSpeaking() {
+      if (this.currentAudio) {
+        try {
+          this.currentAudio.pause();
+          this.currentAudio.src = '';
+          this.currentAudio = null;
+        } catch (e) {
+          console.error('Error stopping audio:', e);
+        }
+      }
+      this.isNobaraSpeaking = false;
+    },
 
+    speakNobara(text, onEnd, audioUrl = null) {
       if (this.currentAudio) {
         try { this.currentAudio.pause(); } catch (e) {}
         this.currentAudio = null;
       }
+      const clean = String(text || "").replace(/[#*`~_]/g, "").trim().slice(0, 450);
+      if (!clean && !audioUrl) { if (onEnd) onEnd(); return; }
 
-      const clean = text.replace(/[#*`~_]/g, "").trim();
-      const url = audioUrl || `/api/tts?text=${encodeURIComponent(clean)}&voice=Aoede`;
+      const url = audioUrl || `/api/tts?text=${encodeURIComponent(clean)}&voice=${TTS_VOICE}`;
       const audio = new Audio(url);
-      audio.playbackRate = 1.08;
+      audio.preload = "auto";
       this.currentAudio = audio;
+      this.isNobaraSpeaking = true;
 
-      const finishHandler = () => {
-        this.currentAudio = null;
-        setTimeout(() => {
-          this.isNobaraSpeaking = false;
-          if (onEnd) onEnd();
-        }, 350);
+      audio.onended = () => { 
+        this.currentAudio = null; 
+        this.isNobaraSpeaking = false; 
+        if (onEnd) onEnd(); 
       };
-
-      audio.onended = finishHandler;
-      audio.onerror = finishHandler;
-      audio.play().catch(e => {
-        console.warn("Audio autoplay blocked by browser policy:", e);
-        finishHandler();
+      audio.onerror = () => { 
+        this.currentAudio = null; 
+        this.isNobaraSpeaking = false; 
+        if (onEnd) onEnd(); 
+      };
+      audio.play().catch(() => { 
+        this.isNobaraSpeaking = false; 
+        if (onEnd) onEnd(); 
       });
     }
   };

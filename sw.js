@@ -1,4 +1,4 @@
-const CACHE_NAME = "habiba-notebook-v6-singleton-voice";
+const CACHE_NAME = "habiba-notebook-3d-claymorphic-v1";
 
 self.addEventListener("install", (event) => {
   self.skipWaiting();

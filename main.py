@@ -4,6 +4,7 @@ Smart Voice-Enabled Girly Notebook Backend
 Tech Stack: FastAPI, Pydantic, HTTPX, Google AI Studio TTS (Gemini 2.5/3.8 Flash), Groq fallback, Pollinations Image Engine
 """
 from __future__ import annotations
+import re
 
 import os
 import json
@@ -21,6 +22,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 import httpx
+import edge_tts
 import requests
 import anyio
 from fastapi import FastAPI, HTTPException
@@ -30,6 +32,13 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 app = FastAPI(title="Smart Girly Notebook API", version="2.0.0")
+
+@app.middleware("http")
+async def add_ngrok_skip_header(request, call_next):
+    response = await call_next(request)
+    response.headers["ngrok-skip-browser-warning"] = "true"
+    response.set_cookie("ngrok-skip-browser-warning", "true", max_age=31536000)
+    return response
 
 app.add_middleware(
     CORSMiddleware,
@@ -94,286 +103,115 @@ TTS_MODELS_PRIORITY = [
     "gemini-2.5-flash-preview-tts"
 ]
 
-def generate_gemini_tts(text: str, voice_name: str = "Aoede") -> bytes:
-    global _last_working_key
-    clean_text = text.replace("#", "").replace("*", "").replace("`", "").replace("~", "").replace("_", "").strip()
-    if not clean_text:
-        return b""
-    cache_key = hashlib.md5(f"{voice_name}_{clean_text}".encode("utf-8")).hexdigest()
-    cache_wav = AUDIO_CACHE_DIR / f"{cache_key}.wav"
-    if cache_wav.exists():
-        data = cache_wav.read_bytes()
-        if data.startswith(b"RIFF"):
-            return data
+# -----------------------------------------------------------------------------
+# Google Gemini TTS Engine (Youthful Egyptian Cairene Voice: Leda)
+# -----------------------------------------------------------------------------
+GEMINI_TTS_MODEL = os.getenv("GEMINI_TTS_MODEL", "gemini-2.5-flash-preview-tts")
+CHILD_VOICE = "Leda"
+ALLOWED_VOICES = {"Leda", "Zephyr", "Puck", "Kore"}
+_TTS_CACHE: dict[str, bytes] = {}
+_TTS_CACHE_MAX = 200
 
-    payload = {
-        "contents": [{"parts": [{"text": f"Read the following text aloud: {clean_text[:450]}"}]}],
-        "generationConfig": {
-            "responseModalities": ["AUDIO"],
-            "speechConfig": {
-                "voiceConfig": {
-                    "prebuiltVoiceConfig": {"voiceName": voice_name}
-                }
-            }
-        }
-    }
+PERSONA = (
+    "Speak in a bright, youthful, cheerful and playful voice, "
+    "with a natural Cairene Egyptian Arabic accent (not Levantine, not Modern Standard). "
+    "Light, warm and expressive, with natural pauses and a friendly smile in the tone. "
+    "Not robotic, not monotone. Read this exactly:\n"
+)
 
-    now = datetime.datetime.now().timestamp()
-    # Try all non-cooldown keys in GEMINI_API_KEYS_LIST
-    keys_to_try = []
-    if _last_working_key and _key_cooldowns.get(_last_working_key, 0) < now:
-        keys_to_try.append(_last_working_key)
-    for k in GEMINI_API_KEYS_LIST:
-        if k not in keys_to_try and _key_cooldowns.get(k, 0) < now:
-            keys_to_try.append(k)
+def _pcm_to_wav(pcm: bytes, rate: int = 24000) -> bytes:
+    buf = io.BytesIO()
+    with wave.open(buf, "wb") as w:
+        w.setnchannels(1)
+        w.setsampwidth(2)
+        w.setframerate(rate)
+        w.writeframes(pcm)
+    return buf.getvalue()
 
-    for candidate_key in keys_to_try:
-        for model in TTS_MODELS_PRIORITY:
-            url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={candidate_key}"
-            try:
-                resp = requests.post(url, json=payload, timeout=8.0)
-                if resp.status_code == 200:
-                    data = resp.json()
-                    candidates = data.get("candidates", [])
-                    if candidates:
-                        parts = candidates[0].get("content", {}).get("parts", [])
-                        for p in parts:
-                            if "inlineData" in p and p["inlineData"].get("data"):
-                                pcm_bytes = base64.b64decode(p["inlineData"]["data"])
-                                buf = io.BytesIO()
-                                with wave.open(buf, "wb") as wf:
-                                    wf.setnchannels(1)
-                                    wf.setsampwidth(2)
-                                    wf.setframerate(24000)
-                                    wf.writeframes(pcm_bytes)
-                                wav_bytes = buf.getvalue()
-                                cache_wav.write_bytes(wav_bytes)
-                                _last_working_key = candidate_key
-                                return wav_bytes
-                elif resp.status_code == 429:
-                    _key_cooldowns[candidate_key] = now + 120.0
-                    break
-            except Exception:
+def _call_tts(prompt_text: str, voice: str) -> dict:
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_TTS_MODEL}:generateContent"
+    keys_to_try = list(GEMINI_API_KEYS_LIST) if GEMINI_API_KEYS_LIST else [os.environ.get("GEMINI_API_KEY", "")]
+    
+    last_err = None
+    for api_key in keys_to_try:
+        try:
+            r = requests.post(
+                url,
+                headers={"x-goog-api-key": api_key, "Content-Type": "application/json"},
+                json={
+                    "contents": [{"parts": [{"text": prompt_text}]}],
+                    "generationConfig": {
+                        "responseModalities": ["AUDIO"],
+                        "speechConfig": {"voiceConfig": {"prebuiltVoiceConfig": {"voiceName": voice}}},
+                    },
+                },
+                timeout=25,
+            )
+            data = r.json()
+            if r.status_code == 200 and "candidates" in data and data["candidates"]:
+                return data["candidates"][0]["content"]["parts"][0]["inlineData"]
+            elif r.status_code == 429:
+                last_err = "429_quota"
                 continue
+            else:
+                last_err = data.get("promptFeedback") or data.get("error")
+        except Exception as e:
+            last_err = str(e)
+            continue
+            
+    print("TTS rotated keys all failed/quota:", last_err)
+    raise RuntimeError(f"tts_rejected: {last_err}")
 
-    raise RuntimeError("Failed to synthesize Google Studio voice Aoede")
+def generate_gemini_tts(text: str, voice_name: str = CHILD_VOICE) -> bytes:
+    clean = re.sub(r"[#*`_~>]", "", text).strip()[:450]
+    if not clean:
+        raise ValueError("empty text")
+    voice = voice_name if voice_name in ALLOWED_VOICES else CHILD_VOICE
 
+    key = hashlib.sha1(f"{voice}|{clean}".encode()).hexdigest()
+    if key in _TTS_CACHE:
+        return _TTS_CACHE[key]
 
-# -----------------------------------------------------------------------------
-# Data Models
-# -----------------------------------------------------------------------------
-class CorrectArabicRequest(BaseModel):
-    raw_text: str = Field(..., min_length=1)
-
-class GenerateBackgroundRequest(BaseModel):
-    scene_description: str = Field(..., min_length=1)
-
-class SetupTableHeadersRequest(BaseModel):
-    raw_speech: str = Field(..., min_length=1)
-
-class FillTableRowsRequest(BaseModel):
-    raw_speech: str = Field(..., min_length=1)
-    headers: List[str] = Field(default_factory=list)
-
-class ParseTaskRequest(BaseModel):
-    speech_text: str = Field(..., min_length=1)
-
-class StudioImageRequest(BaseModel):
-    prompt: str = Field(..., min_length=1)
-    style: Optional[str] = "cute pastel anime"
-
-class BestieChatRequest(BaseModel):
-    user_message: str = Field(..., min_length=1)
-    history: Optional[list] = []
-
-class AmbientAssistRequest(BaseModel):
-    user_message: Optional[str] = ""
-    intent: Optional[str] = "chat"
-    tasks: Optional[list] = []
-    diary_snippet: Optional[str] = ""
-    current_time: Optional[str] = ""
-    current_hour: Optional[int] = 20
-
-class ProactiveCheckRequest(BaseModel):
-    current_time: Optional[str] = ""
-    force_type: Optional[str] = None
-
-class OmniListenRequest(BaseModel):
-    raw_speech: str = Field(..., min_length=1)
-    current_tab: Optional[str] = "diary"
-
-
-# -----------------------------------------------------------------------------
-# LLM Caller with Multi-Key Rotation and Fallback
-# -----------------------------------------------------------------------------
-async def call_llm(prompt: str, json_mode: bool = False) -> str:
-    # 1. Try Groq (ultra-fast 0.6s response with qwen/qwen3.8-27b or openai/gpt-oss-20b)
-    if GROQ_API_KEY:
-        for groq_m in ["qwen/qwen3.8-27b", "openai/gpt-oss-20b"]:
-            try:
-                url = "https://api.groq.com/openai/v1/chat/completions"
-                headers = {"Authorization": f"Bearer {GROQ_API_KEY}"}
-                body = {
-                    "model": groq_m,
-                    "messages": [
-                        {"role": "system", "content": "أنت نوبارا كوجيساكي، البست فريند والأخت الكول للبنوتة حبيبة. اتكلمي بالعامية المصرية الحنونة والمرحة في جملتين سريعتين."},
-                        {"role": "user", "content": prompt}
-                    ],
-                    "temperature": 0.3,
-                    "max_tokens": 150
-                }
-                if json_mode:
-                    body["response_format"] = {"type": "json_object"}
-
-                async with httpx.AsyncClient(timeout=3.5) as client:
-                    res = await client.post(url, headers=headers, json=body)
-                    if res.status_code == 200:
-                        data = res.json()
-                        content = data["choices"][0]["message"]["content"].strip()
-                        if content:
-                            return content
-            except Exception:
-                continue
-
-    # 2. Try Gemini across all keys
-    for key in GEMINI_API_KEYS_LIST:
-        for model in ["gemini-3-flash-preview", "gemini-3.8-flash", "gemini-2.5-flash-preview-tts"]:
-            try:
-                url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={key}"
-                payload = {
-                    "contents": [{"parts": [{"text": prompt}]}],
-                    "generationConfig": {"temperature": 0.3}
-                }
-                if json_mode:
-                    payload["generationConfig"]["responseMimeType"] = "application/json"
-
-                async with httpx.AsyncClient(timeout=6.0) as client:
-                    res = await client.post(url, json=payload)
-                    if res.status_code == 200:
-                        data = res.json()
-                        parts = data.get("candidates", [{}])[0].get("content", {}).get("parts", [])
-                        if parts and "text" in parts[0]:
-                            return parts[0]["text"].strip()
-            except Exception:
-                continue
-
-    # 3. Fallback default
-    if json_mode:
-        return json.dumps({
-            "headers": ["المهمة", "الميعاد", "اليوم", "المكان", "الملاحظات"],
-            "reply": "عملتلك المطلوب يا حبيبة قلبي 🌸"
-        }, ensure_ascii=False)
-    return "يا حبيبة يا قمر، معاكي وسامعاكي في كل وقت! 🌸💖"
-
-
-# -----------------------------------------------------------------------------
-# Static Routes
-# -----------------------------------------------------------------------------
-@app.get("/")
-async def serve_index():
-    index_file = BASE_DIR / "index.html"
-    if not index_file.exists():
-        raise HTTPException(status_code=404, detail="index.html not found")
-    return FileResponse(
-        index_file,
-        headers={"Cache-Control": "no-cache, no-store, must-revalidate", "Pragma": "no-cache", "Expires": "0"}
-    )
-
-@app.get("/manifest.json")
-async def serve_manifest():
-    mf = BASE_DIR / "manifest.json"
-    return FileResponse(mf, media_type="application/manifest+json")
-
-@app.get("/sw.js")
-async def serve_sw():
-    sw = BASE_DIR / "sw.js"
-    return FileResponse(
-        sw,
-        media_type="application/javascript",
-        headers={"Cache-Control": "no-cache, no-store, must-revalidate", "Pragma": "no-cache", "Expires": "0"}
-    )
-
-PIPELINE_MD_PATH = Path("C:/Users/Asmaa/.gemini/antigravity/scratch/zero_touch_pipeline/output/pipeline_self_test/merged_assembled.md")
-LOCAL_MD_PATH = BASE_DIR / "merged_assembled.md"
-PIPELINE_ZIP_PATH = Path("C:/Users/Asmaa/.gemini/antigravity/scratch/zero_touch_pipeline/output/pipeline_self_test/release.zip")
-LOCAL_ZIP_PATH = BASE_DIR / "release.zip"
-
-@app.get("/report")
-async def serve_pipeline_report():
-    md_content = ""
-    for candidate in [PIPELINE_MD_PATH, LOCAL_MD_PATH]:
-        if candidate.exists():
-            try:
-                md_content = candidate.read_text(encoding="utf-8")
-                break
-            except Exception:
-                pass
-    if not md_content:
-        md_content = "# تقرير البايب لاين\n\nلم يتم العثور على ملف `merged_assembled.md` حتى الآن."
-
-    html = f"""<!DOCTYPE html>
-<html lang="ar" dir="rtl">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>تقرير مشروع حبيبة | Zero-Touch Pipeline</title>
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/github-markdown-css/github-markdown.min.css">
-  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
-  <style>
-    body {{ background: #0d1117; color: #c9d1d9; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; padding: 16px; margin: 0; }}
-    .container {{ max-width: 900px; margin: 0 auto; background: #161b22; padding: 24px; border-radius: 12px; border: 1px solid #30363d; box-shadow: 0 8px 24px rgba(0,0,0,0.5); }}
-    .header-bar {{ display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #7b2cbf; padding-bottom: 16px; margin-bottom: 20px; flex-wrap: wrap; gap: 10px; }}
-    .header-bar h1 {{ margin: 0; font-size: 1.4rem; color: #00f0ff; }}
-    .btn-download {{ background: #7b2cbf; color: #fff; text-decoration: none; padding: 10px 18px; border-radius: 8px; font-weight: bold; font-size: 0.9rem; transition: 0.2s; }}
-    .btn-download:hover {{ background: #9d4edd; }}
-    .markdown-body {{ background: transparent !important; color: #c9d1d9 !important; font-family: inherit; }}
-  </style>
-</head>
-<body>
-  <div class="container">
-    <div class="header-bar">
-      <h1>📋 التقرير الشامل المجمّع لمشروع حبيبة (merged_assembled.md)</h1>
-      <a href="/release.zip" class="btn-download" download="release.zip">📦 تحميل كود المشروع الكامل (ZIP)</a>
-    </div>
-    <div id="content" class="markdown-body"></div>
-  </div>
-  <script>
-    const rawMd = {json.dumps(md_content)};
-    document.getElementById('content').innerHTML = marked.parse(rawMd);
-  </script>
-</body>
-</html>"""
-    return HTMLResponse(content=html)
-
-@app.get("/merged_assembled.md")
-async def serve_raw_merged_md():
-    for candidate in [PIPELINE_MD_PATH, LOCAL_MD_PATH]:
-        if candidate.exists():
-            return FileResponse(candidate, media_type="text/markdown; charset=utf-8")
-    raise HTTPException(status_code=404, detail="merged_assembled.md not found")
-
-@app.get("/release.zip")
-async def serve_release_zip():
-    for candidate in [PIPELINE_ZIP_PATH, LOCAL_ZIP_PATH]:
-        if candidate.exists():
-            return FileResponse(candidate, media_type="application/zip", filename="release.zip")
-    raise HTTPException(status_code=404, detail="release.zip not found")
-
-
-# -----------------------------------------------------------------------------
-# Google AI Studio TTS Endpoint
-# -----------------------------------------------------------------------------
-@app.get("/api/tts")
-async def get_google_tts(text: str, voice: str = "Aoede"):
-    """Official Google AI Studio TTS Engine (Aoede / Kore) - Natural Egyptian Dialect"""
-    if not text or not text.strip():
-        raise HTTPException(status_code=400, detail="Text is required")
     try:
-        audio_bytes = await anyio.to_thread.run_sync(generate_gemini_tts, text, voice)
-        media_type = "audio/wav" if audio_bytes.startswith(b"RIFF") else "audio/mpeg"
-        return Response(content=audio_bytes, media_type=media_type, headers={"Cache-Control": "public, max-age=86400"})
+        try:
+            part = _call_tts(PERSONA + clean, voice)
+        except RuntimeError:
+            part = _call_tts("Say cheerfully in Egyptian Arabic: " + clean, voice)
+
+        m = re.search(r"rate=(\d+)", part.get("mimeType", ""))
+        wav = _pcm_to_wav(base64.b64decode(part["data"]), int(m.group(1)) if m else 24000)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        print(f"Gemini TTS quota/error, seamless fallback to Egyptian youth audio: {e}")
+        # High quality Egyptian teen voice fallback
+        import edge_tts, asyncio
+        async def _edge():
+            comm = edge_tts.Communicate(clean, "ar-EG-SalmaNeural", pitch="+14Hz", rate="+6%")
+            buf = bytearray()
+            async for chunk in comm.stream():
+                if chunk["type"] == "audio":
+                    buf.extend(chunk["data"])
+            return bytes(buf)
+        wav = asyncio.run(_edge())
+
+    if len(_TTS_CACHE) >= _TTS_CACHE_MAX:
+        _TTS_CACHE.pop(next(iter(_TTS_CACHE)))
+    _TTS_CACHE[key] = wav
+    return wav
+
+def tts_url(text: str) -> str:
+    from urllib.parse import quote
+    clean = re.sub(r"[#*`_~>]", "", text).strip()
+    return f"/api/tts?text={quote(clean[:450])}&voice={CHILD_VOICE}"
+
+@app.get("/api/tts")
+async def get_google_tts(text: str, voice: str = CHILD_VOICE):
+    try:
+        audio = await anyio.to_thread.run_sync(generate_gemini_tts, text, voice)
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"TTS failed: {e}")
+    media = "audio/wav" if audio.startswith(b"RIFF") else "audio/mpeg"
+    return Response(content=audio, media_type=media,
+                    headers={"Cache-Control": "public, max-age=3600"})
 
 
 # -----------------------------------------------------------------------------
@@ -381,20 +219,22 @@ async def get_google_tts(text: str, voice: str = "Aoede"):
 # -----------------------------------------------------------------------------
 @app.post("/api/diary/correct-arabic")
 async def correct_arabic(req: CorrectArabicRequest):
-    prompt = f"""أنت "نوبارا كوجيساكي" (Nobara Kugisaki 🌸💅)، البطلة الشجاعة والمرحة من أنمي جوجوتسو كايسن، والبيست فريند وصاحبة عمر البنوتة الجميلة "حبيبة" (Habiba).
+    prompt = f"""قواعد اللهجة والشخصية (صارمة جداً):
+1. أنتِ "نوبارا" البيست فريند وصاحبة عمر "حبيبة" (Habiba)، بنوتة مصرية مراهقة شقية ولطيفة جداً عمرك 15 سنة.
+2. اللهجة: عامية مصرية قاهرية 100% لبنات المدارس والمراهقين الروشة ("يا بيبو"، "يا روحي"، "يا قلبي"، "إيه العسل ده"، "يا خراشي"، "وحشتيني أوي"، "بصي يا ستي"، "ده أنتي قمر"، "جامدة أوي"، "ولا تشيلي هم خالص يا قلبي").
+3. ممنوع منعاً باتاً: أي كلمات شامية، لبنانية، سورية (زي شو، بدك، هيك، كتير، هلق، عم نحكي)، وممنوع أي لغة عربية فصحى جافة أو معقدة.
 حبيبة قالت الكلام ده بصوتها وهي بتفضفض أو بتكتب يومياتها:
 "{req.raw_text}"
 
-المطلوب إخراج كائن JSON فقط يحتوي على عنصرين:
-1. "sensei_reply": رد منكِ كـ نوبارا على حبيبة باللهجة المصرية العامية الكول والحنونة جداً، تناديها باسمها (حبيبة أو بيبو)، تشجعيها وتهزري معاها (مثلاً: "يا حبيبة يا قلبي ولا تشيلي هم! ده يوم قمر.. سمعتك وسجلت كل كلمة في دفترنا 🌸⚡").
-2. "corrected_text": صياغة كلام حبيبة نفسه لمذكراتها باللهجة المصرية العامية الأنيقة والمنسقة وتصحيح أي أخطاء في نطق المايك عشان ينزل في دفتر يوميات حبيبة.
+المطلوب إخراج كائن JSON فقط:
+1. "sensei_reply": رد نوبارا لصاحبتها حبيبة بالعامية المصرية المراهقة المرحة واللذيذة جداً، تناديها باسمها (حبيبة أو بيبو)، تشجعيها وتهزري معاها.
+2. "corrected_text": صياغة كلام حبيبة لدفتر يومياتها بالعامية المصرية الروشة التلقائية المنظمة مع إيموجيز لطيفة، وتصحيح أي كلمات اتلخبطت بسبب المايك.
 
 الرد JSON فقط:
 {{
   "sensei_reply": "...",
   "corrected_text": "..."
-}}
-"""
+}}"""
     raw_response = await call_llm(prompt, json_mode=True)
     try:
         cleaned = raw_response.strip()
@@ -412,7 +252,7 @@ async def correct_arabic(req: CorrectArabicRequest):
     return {
         "sensei_reply": sensei_reply,
         "corrected_text": corrected_text,
-        "audio_url": f"/api/tts?text={urllib.parse.quote(clean_audio)}&voice=Aoede"
+        "audio_url": tts_url(clean_audio)
     }
 
 @app.post("/api/diary/generate-background")
@@ -462,7 +302,7 @@ async def setup_table_headers(req: SetupTableHeadersRequest):
     return {
         "headers": headers,
         "reply": reply,
-        "audio_url": f"/api/tts?text={urllib.parse.quote(clean_audio)}&voice=Aoede"
+        "audio_url": tts_url(clean_audio)
     }
 
 @app.post("/api/table/fill-rows")
@@ -504,7 +344,7 @@ async def fill_table_rows(req: FillTableRowsRequest):
     return {
         "rows": rows,
         "reply": reply,
-        "audio_url": f"/api/tts?text={urllib.parse.quote(clean_audio)}&voice=Aoede"
+        "audio_url": tts_url(clean_audio)
     }
 
 @app.post("/api/table/parse-task")
@@ -593,7 +433,7 @@ async def bestie_chat(req: BestieChatRequest):
     clean = reply.replace('#', '').replace('*', '').replace('`', '').replace('~', '').replace('_', '').strip()
     return {
         "reply": reply,
-        "audio_url": f"/api/tts?text={urllib.parse.quote(clean)}&voice=Aoede"
+        "audio_url": tts_url(clean)
     }
 
 @app.post("/api/bestie/call-opener")
@@ -608,7 +448,7 @@ async def bestie_call_opener():
     clean = chosen.replace('#', '').replace('*', '').replace('`', '').replace('~', '').replace('_', '').strip()
     return {
         "opener": chosen,
-        "audio_url": f"/api/tts?text={urllib.parse.quote(clean)}&voice=Aoede"
+        "audio_url": tts_url(clean)
     }
 
 @app.post("/api/bestie/ambient-assist")
@@ -626,7 +466,7 @@ async def bestie_ambient_assist(req: AmbientAssistRequest):
             clean = reply.replace('#', '').replace('*', '').replace('`', '').replace('~', '').replace('_', '').strip()
             return {
                 "reply": reply,
-                "audio_url": f"/api/tts?text={urllib.parse.quote(clean)}&voice=Aoede"
+                "audio_url": tts_url(clean)
             }
 
     tasks_text = ""
@@ -651,7 +491,7 @@ async def bestie_ambient_assist(req: AmbientAssistRequest):
     clean = reply.replace('#', '').replace('*', '').replace('`', '').replace('~', '').replace('_', '').strip()
     return {
         "reply": reply.strip(),
-        "audio_url": f"/api/tts?text={urllib.parse.quote(clean)}&voice=Aoede"
+        "audio_url": tts_url(clean)
     }
 
 
@@ -702,7 +542,7 @@ async def bestie_omni_listen(req: OmniListenRequest):
         "diary_entry": diary_entry,
         "table_row": table_row,
         "studio_prompt": studio_prompt,
-        "audio_url": f"/api/tts?text={urllib.parse.quote(clean_audio)}&voice=Aoede"
+        "audio_url": tts_url(clean_audio)
     }
 
 
@@ -733,7 +573,7 @@ async def check_proactive_call(req: ProactiveCheckRequest):
             "call_type": "lesson",
             "caller_name": "نوبارا كوجيساكي 🌸💅",
             "message": msg,
-            "audio_url": f"/api/tts?text={urllib.parse.quote(msg)}"
+            "audio_url": tts_url(msg)
         }
     elif req.force_type == "sleep":
         msg = "يلا يا حبيبة، قومي روحي الحمام وتشطفي عشان تدخلي تنامي يا قلبي.. الوقت اتأخر ومحتاجة ترتاحي وتصبحي على ألف خير وسعادة! 🌙🌸"
@@ -742,7 +582,7 @@ async def check_proactive_call(req: ProactiveCheckRequest):
             "call_type": "sleep",
             "caller_name": "نوبارا كوجيساكي 🌸💅",
             "message": msg,
-            "audio_url": f"/api/tts?text={urllib.parse.quote(msg)}"
+            "audio_url": tts_url(msg)
         }
     elif req.force_type == "lunch":
         msg = "يلا يا بيبو عشان تاكلي وتشربي مية، كفاية مذاكرة ولعب شوية عشان صحتك ورقتك يا قمر! 🧋🌸"
@@ -751,7 +591,7 @@ async def check_proactive_call(req: ProactiveCheckRequest):
             "call_type": "lunch",
             "caller_name": "نوبارا كوجيساكي 🌸💅",
             "message": msg,
-            "audio_url": f"/api/tts?text={urllib.parse.quote(msg)}"
+            "audio_url": tts_url(msg)
         }
 
     # 2. Autonomous check: Bedtime (e.g. 21:45 to 22:30)
@@ -770,7 +610,7 @@ async def check_proactive_call(req: ProactiveCheckRequest):
                     "call_type": "sleep",
                     "caller_name": "نوبارا كوجيساكي 🌸💅",
                     "message": msg,
-                    "audio_url": f"/api/tts?text={urllib.parse.quote(msg)}"
+                    "audio_url": tts_url(msg)
                 }
     except Exception:
         pass
@@ -779,6 +619,26 @@ async def check_proactive_call(req: ProactiveCheckRequest):
 
 
 # Mount static directory
+
+# -----------------------------------------------------------------------------
+# Root Web Application & APK Download Routes
+# -----------------------------------------------------------------------------
+@app.get("/", response_class=FileResponse)
+async def serve_index():
+    return FileResponse(BASE_DIR / "index.html")
+
+@app.get("/index.html", response_class=FileResponse)
+async def serve_index_html():
+    return FileResponse(BASE_DIR / "index.html")
+
+@app.get("/habiba.apk", response_class=FileResponse)
+async def serve_apk():
+    return FileResponse(BASE_DIR / "habiba.apk", filename="Habiba-Notebook.apk", media_type="application/vnd.android.package-archive")
+
+@app.get("/Habiba-Notebook.apk", response_class=FileResponse)
+async def serve_apk_named():
+    return FileResponse(BASE_DIR / "habiba.apk", filename="Habiba-Notebook.apk", media_type="application/vnd.android.package-archive")
+
 app.mount("/static", StaticFiles(directory=BASE_DIR), name="static")
 
 if __name__ == "__main__":

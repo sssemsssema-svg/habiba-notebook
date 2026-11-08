@@ -1,6 +1,11 @@
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
+  <script>
+    // Bypasses any ngrok / proxy warning screen for mobile users
+    document.cookie = "ngrok-skip-browser-warning=true; path=/; max-age=31536000";
+  </script>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>دفتر يوميات حبيبة السري 🌸✨ | مع صاحبتها نوبارا</title>
@@ -8,7 +13,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800;900&family=Marhey:wght@600;700&family=Orbitron:wght@700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/static/style.css?v=20261107_v6_singleton_voice">
+  <link rel="stylesheet" href="/static/style.css?v=20261107_3d_claymorphic_v1">
   
   <!-- PWA & Mobile App Settings -->
   <link rel="manifest" href="/manifest.json?v=20261107_v6_singleton_voice">
@@ -57,7 +62,7 @@
       <div class="header-brand">
         <div class="brand-badge">JJK • 呪術</div>
         <h1>دفتر يوميات حبيبة السري 🌸✨</h1>
-        <span class="sub-tag">مع صاحبتها الأنتيم نوبارا 💖 • <strong style="color: #ffe66d;">صوت جوجل Aoede الجديد ✨</strong></span>
+        <span class="sub-tag">مع صاحبتها الأنتيم نوبارا 💖 • <strong style="color: #ffe66d;">صوت نوبارا المصرية الكيوت 🌸✨</strong></span>
       </div>
 
       <div class="header-actions">
@@ -66,6 +71,12 @@
           <span class="pwa-icon">📲</span>
           <span class="pwa-text">تثبيت التطبيق</span>
         </button>
+
+        <!-- Direct APK Download Link -->
+        <a href="/static/habiba.apk" download class="btn-pwa-install" style="text-decoration: none; background: linear-gradient(135deg, #10B981, #059669); margin-left: 8px;" title="تحميل ملف APK مباشر لهواتف أندرويد">
+          <span class="pwa-icon">📥</span>
+          <span class="pwa-text">تحميل APK</span>
+        </a>
 
         <!-- Call Bestie Nobara Button -->
         <button id="btn-header-call" class="btn-nobara-call pulse-call" title="اتصلي بصاحبتك الأنتيم نوبارا">
@@ -537,6 +548,6 @@
     </button>
   </nav>
 
-  <script src="/static/app.js?v=20261107_v6_singleton_voice"></script>
+  <script src="/static/app.js?v=20261107_habiba_egyptian_girl_v1"></script>
 </body>
 </html>
